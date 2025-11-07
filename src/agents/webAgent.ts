@@ -1,7 +1,7 @@
 import { ensureMongoConnection } from "../config";
 import { checkIfDataExists, createVectorIndex, ingestData } from "../scripts/ingest-data";
 import { generateResponse } from "../planning";
-import { isCurrentMonth } from "../utils/dateUtils";  // ✅ ADICIONAR
+import { isCurrentMonth } from "../utils/dateUtils";  
 
 export const runWebAgent = async (pergunta: string, jsonData: any, targetMonth: string) => {
     
@@ -13,7 +13,6 @@ export const runWebAgent = async (pergunta: string, jsonData: any, targetMonth: 
         const isCurrentMonthFlag = isCurrentMonth(targetMonth);
         
         if (isCurrentMonthFlag) {
-            // MÊS ATUAL: SEMPRE REINGERIR
             console.log(`[Web Agent] ⚠️ Mês atual detectado (${targetMonth})`);
             console.log(`[Web Agent] 🔄 Reingerindo dados (dados dinâmicos)...`);
             
@@ -23,7 +22,6 @@ export const runWebAgent = async (pergunta: string, jsonData: any, targetMonth: 
             console.log(`[Web Agent] ✅ Reingestão concluída`);
             
         } else {
-            // MÊS PASSADO: SÓ INGERIR SE NÃO EXISTIR
             const dataExists = await checkIfDataExists(targetMonth);
             
             if (!dataExists) {

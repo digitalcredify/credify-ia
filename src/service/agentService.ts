@@ -13,8 +13,6 @@ const routerSchema = z.object({
     reasoning: z.string().describe("Breve explicação do porquê esta rota foi escolhida")
 })
 
-// depois que eu alterei a variavel routerPromptTemplate começou a daer erro em 
-// const result = await routerAgent.invoke({ pergunta })
 
 const routerPromptTemplate = PromptTemplate.fromTemplate(`
     Você é um agente roteador.

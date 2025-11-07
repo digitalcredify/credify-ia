@@ -7,8 +7,6 @@ import { OpenAIEmbeddings } from "@langchain/openai";
 
 
 
-// arquivo com variaveis de ambiente e que conecta aplicações a serviços..
-// Ex: Banco de dados, openAI
 
 dotenv.config();
 export const apiKeyOpenAi = process.env.API_KEY;

@@ -9,12 +9,10 @@ export async function generatePdfFromHtml(htmlContent: string): Promise<Buffer> 
     
     const page = await browser.newPage();
     
-    // Define o conteúdo HTML
     await page.setContent(htmlContent, {
         waitUntil: 'networkidle0'
     });
     
-    // Gera o PDF
     const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,

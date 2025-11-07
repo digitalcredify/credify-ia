@@ -2,16 +2,13 @@ import { vectorCollection } from "./config";
 import { getEmbedding } from "./scripts/ingest-data";
 import { evaluate } from 'mathjs'; 
 
-// esse arquivo define as ferramentas que o agente pode usar para dar respostas as perguntas.
 
 export async function vectorSearchTool(input:{query: string, filters:any}) {
 
     console.log("vector search input:", input)
 
-    // gera o embedding apenar para a parte semãntica da consulta.
     const queryEmbedding = await getEmbedding(input.query)
 
-    // pipeline de busca hibrida
     const pipeline = [
         {
             $vectorSearch:{
@@ -22,7 +19,6 @@ export async function vectorSearchTool(input:{query: string, filters:any}) {
                 limit:500,
                 numCandidates: 500,
 
-                // pré filtro busca vetorial
                 filter: input.filters
 
             }
@@ -44,7 +40,6 @@ export async function vectorSearchTool(input:{query: string, filters:any}) {
     const results = await cursor.toArray()
     return results.map(r => ({
         document: {
-            // Converte o objeto JSON de volta para string para o LLM ler
             pageContent: JSON.stringify(r.document) 
         },
         score: r.score

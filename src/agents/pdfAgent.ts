@@ -5,14 +5,11 @@ import { generatePdfFromHtml } from "../utils/pdfGenerator";
 export async function runPdfAgent(sessionId: string, userInput: string) {
     
     try {
-        // ✅ ADICIONAR: Garantir conexão MongoDB
         await ensureMongoConnection();
         console.log("[PDF Agent] MongoDB pronto para uso.");
         
-        // 1. Recupera histórico
         const sessionHistory = await retrieverSessionHistory(sessionId);
         
-        // 2. Identifica relatório
         const lastReport = findLastReport(sessionHistory);
         
         if (!lastReport) {
@@ -22,13 +19,10 @@ export async function runPdfAgent(sessionId: string, userInput: string) {
             };
         }
         
-        // 3. Gera HTML
         const htmlContent = await generateHtmlFromReport(lastReport.content, sessionHistory);
         
-        // 4. Converte para PDF
         const pdfBuffer = await generatePdfFromHtml(htmlContent);
         
-        // 5. Retorna
         return {
             success: true,
             base64: pdfBuffer.toString('base64'),
@@ -44,7 +38,6 @@ export async function runPdfAgent(sessionId: string, userInput: string) {
         };
     }
     
-    // ✅ NÃO desconecta aqui!
 }
 
 function findLastReport(history: any[]): { role: string, content: string } | null {
@@ -53,42 +46,32 @@ function findLastReport(history: any[]): { role: string, content: string } | nul
     
     let bestCandidate: { msg: any, score: number, index: number } | null = null;
     
-    // Percorre de trás para frente
     for (let i = history.length - 1; i >= 0; i--) {
         const msg = history[i];
         
-        // Ignora mensagens do usuário
         if (msg.role === "user") continue;
         
-        // Ignora mensagens muito curtas
         if (msg.content.length < 300) continue;
         
-        // Calcula pontuação base
         let score = 0;
         
-        // Pontos por tamanho
         if (msg.content.length > 500) score += 2;
         if (msg.content.length > 1000) score += 2;
         if (msg.content.length > 2000) score += 3;
         
-        // Pontos por estrutura Markdown
         const headerCount = (msg.content.match(/^#{1,3}\s/gm) || []).length;
         score += Math.min(headerCount * 2, 10);
         
-        // Pontos por tabelas
         const tableRows = (msg.content.match(/\|.*\|/g) || []).length;
         if (tableRows > 3) score += 5;
         if (tableRows > 10) score += 5;
         
-        // Pontos por valores monetários
         const monetaryCount = (msg.content.match(/R\$\s*[\d.,]+/g) || []).length;
         score += Math.min(monetaryCount, 10);
         
-        // Pontos por percentuais
         const percentageCount = (msg.content.match(/\d+[.,]\d+\s*%/g) || []).length;
         score += Math.min(percentageCount, 5);
         
-        // Pontos por palavras-chave
         const keywords = [
             'relatório', 'análise', 'resumo', 'total', 'receita', 'custo',
             'lucro', 'desempenho', 'resultado', 'métrica', 'indicador',
@@ -101,28 +84,24 @@ function findLastReport(history: any[]): { role: string, content: string } | nul
             }
         }
         
-        // Pontos por listas
         const listItems = (msg.content.match(/^[-*]\s/gm) || []).length;
         if (listItems > 3) score += 3;
         
-        // ✅ MUDANÇA PRINCIPAL: Bônus MASSIVO por mensagem recente
-        // Quanto mais recente, maior o bônus
+      
         const positionFromEnd = history.length - 1 - i;
         
-        if (positionFromEnd === 0) score += 100;      // Última mensagem: +100 pontos!
-        else if (positionFromEnd === 1) score += 50;  // Penúltima: +50
-        else if (positionFromEnd === 2) score += 25;  // Antepenúltima: +25
-        else if (positionFromEnd <= 5) score += 10;   // Últimas 5: +10
+        if (positionFromEnd === 0) score += 100;      
+        else if (positionFromEnd === 1) score += 50;  
+        else if (positionFromEnd === 2) score += 25;  
+        else if (positionFromEnd <= 5) score += 10;   
         
         console.log(`[PDF Agent] Mensagem ${i} (pos ${positionFromEnd}): ${score} pontos (${msg.content.length} chars)`);
         
-        // Atualiza melhor candidato
         if (!bestCandidate || score > bestCandidate.score) {
             bestCandidate = { msg, score, index: i };
         }
     }
     
-    // Retorna o melhor candidato se tiver pontuação mínima de 10
     if (bestCandidate && bestCandidate.score >= 10) {
         console.log(`[PDF Agent] Relatório encontrado na posição ${bestCandidate.index} com ${bestCandidate.score} pontos`);
         return bestCandidate.msg;

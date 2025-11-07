@@ -8,12 +8,6 @@
 import { memoryCollection } from "./config"
 
 
-
-/** 
-    * @param {string} sessionId - indentificador unico para sessão de bate papo
-    * @param {string} role - função de remetente (usuario ou sistema)
-    * @param {string} content - conteudo da mensagem
-*/
 export async function storeChatMessage(sessionId:any, role:any, content:any) {
 
     const message = {
@@ -24,13 +18,6 @@ export async function storeChatMessage(sessionId:any, role:any, content:any) {
     }
     await memoryCollection.insertOne(message);
 }
-
-/**
- * Recupera o histórico de bate papo de uma sessão
- * @param {string} sessionId - identificador unico da sessão do chat
- * @returns {Promise<Array<{role: string, content: string}>>}
- * 
- */
 
 export async function retrieverSessionHistory(sessionId:any) {
     const cursor = memoryCollection
@@ -62,9 +49,6 @@ export async function clearAllChatHistory() {
     }
 }
 
-/**
- * Limpa o histórico de uma sessão específica
- */
 export async function clearSessionHistory(sessionId: string) {
     try {
         console.log(`[Memory] 🗑️ Limpando histórico da sessão: ${sessionId}`);

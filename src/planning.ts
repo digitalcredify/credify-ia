@@ -128,7 +128,6 @@ export async function toolSelector(userInput: any, sessionHistory: any[] = []) {
 
 }
 
-// Função para pegar a resposta da llm baseado no message 
 async function getLlmResponse(messages: any, systemMessageContet: any) {
     console.log(messages)
 
@@ -157,9 +156,8 @@ export async function generateResponse(sessionId: any, userInput: any) {
     let response;
 
     if (tool === "vector_search_tool") {
-    // Apenas filtro de mês - SEM filtros adicionais
     const finalFilters = {
-        "month": sessionId  // Filtro simples, sem $and
+        "month": sessionId  
     };
 
     const finalToolInput = {
@@ -168,7 +166,6 @@ export async function generateResponse(sessionId: any, userInput: any) {
     };
 
     const contextResults = await vectorSearchTool(finalToolInput);
-    // ... resto do código
         const context = contextResults.map(doc => doc.document?.pageContent || JSON.stringify(doc)).join('\n---\n');
 
 

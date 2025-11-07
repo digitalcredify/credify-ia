@@ -1,20 +1,16 @@
-// ingest-data.ts (Versão Limpa)
 
-// 1. REMOVIDAS importações do VoyageAI
 import { openAIClient, openAiEmbbeding, vectorCollection } from "../config";
 import * as fs from 'fs';
-// import fetch from 'node-fetch'; // Removido (você está lendo um arquivo local)
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 
-// 2. Dimensões corretas para OpenAI
 const EMBEDDING_DIMENSIONS = 1536;
 
 export async function getEmbedding(data: string) {
     try {
         const response = await openAIClient.embeddings.create({
             input: data,
-            model: 'text-embedding-3-small', // Usar o config ou um padrão
+            model: 'text-embedding-3-small', 
         });
 
         if (response.data && response.data.length > 0) {
@@ -28,7 +24,6 @@ export async function getEmbedding(data: string) {
     }
 }
 
-// Ingere dados de um PDF, gera embeddings e armazena no mongoDB
 export async function ingestData(jsonData: any, month: string) {
     console.log('Iniciando ingestão de dados...');
 
@@ -75,7 +70,6 @@ export async function ingestData(jsonData: any, month: string) {
     }
 }
 
-// Cria um vetor search Index (Este código está PERFEITO, sem alterações)
 export async function createVectorIndex() {
     try {
         const existingIndex = await vectorCollection.listSearchIndexes().toArray();
