@@ -26,6 +26,10 @@ export const OPENAI_MODEL = "gpt-5-2025-08-07";
 
 let isMongoConnected = false;
 
+if (process.env.LANGCHAIN_TRACING_V2 === 'true') {
+    console.log("✅ LangSmith tracing habilitado");
+}
+
 export async function ensureMongoConnection() {
     if (!isMongoConnected) {
         try {

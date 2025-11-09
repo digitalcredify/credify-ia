@@ -15,5 +15,6 @@ export const middleModel = new ChatOpenAI({
 });
 export const advancedModel = new ChatOpenAI({
     model: "gpt-5",
-    apiKey: apiKey
+    apiKey: apiKey,
+  
 });

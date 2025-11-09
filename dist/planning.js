@@ -1,0 +1,266 @@
+"use strict";
+// esse arquivo incluira vários prompts e chamadas LLM para determinar o fluxo de execução do agente
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.OpenAiChatCompleiton = OpenAiChatCompleiton;
+exports.toolSelector = toolSelector;
+exports.generateResponse = generateResponse;
+const config_1 = require("./config");
+const memory_1 = require("./memory");
+const tools_1 = require("./tools");
+const MARKDOWN_RESPONSE_POLICY = `
+### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
+
+Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
+
+**Regras de Formatação:**
+1. **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
+2. **Negrito:** Use \`**texto**\` para destacar partes importantes.
+3. **Tabelas:** Sempre que houver comparação, agregação ou múltiplos itens (empresas, representantes, meses, etc.), use tabelas Markdown no formato:
+
+   | Campo | Valor |
+   |--------|--------|
+   | Exemplo | R$ 1.234,56 |
+
+4. **Código Inline:** Use crases \`texto\` para IDs, nomes técnicos, ou campos JSON.
+5. **Separadores:** Use \`---\` para separar blocos de informação.
+6. **Listas:** Use listas numeradas ou com marcadores para explicar passos, métricas ou observações.
+7. **Emojis (opcional):** Pode usar ícones (📊, 💰, ⚙️) para dar contexto visual.
+8. **Proibido:** Não retornar texto puro sem Markdown.
+
+Resuma tudo sempre em formato legível e estruturado, com foco em clareza e consistência visual.
+`.trim();
+function OpenAiChatCompleiton(messages) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const completion = yield config_1.openAIClient.chat.completions.create({
+                model: config_1.OPENAI_MODEL,
+                messages,
+                // max_tokens: 1024,
+            });
+            return completion.choices[0].message.content;
+        }
+        catch (error) {
+            console.error("Error in openAIChatCompletion:", error);
+            throw error;
+        }
+    });
+}
+function toolSelector(userInput_1) {
+    return __awaiter(this, arguments, void 0, function* (userInput, sessionHistory = []) {
+        const systemPrompt = `
+    Você é um roteador de tarefas inteligente. Sua principal função é analisar a PERGUNTA MAIS RECENTE do usuário e o HISTÓRICO DA CONVERSA para selecionar a ferramenta correta.
+
+    ### Ferramentas Disponíveis
+    - vector_search_tool: Recupera dados financeiros de empresas (consumo, valores, etc.).
+    - calculator_tool: Para operações matemáticas.
+    - none: Para perguntas gerais (ex: "oi", "obrigado").
+
+    ### Regras de Roteamento
+    1.  **Analise o Histórico:** Preste MUITA atenção no histórico. Se a nova pergunta for uma continuação (ex: "e do mario?", "e da outra empresa?"), sua tarefa é manter a MESMA INTENÇÃO da pergunta anterior (ex: "gerar relatório").
+    2.  **NÃO extraia filtros:** Retorne SEMPRE "filters": {} para vector_search_tool. A busca vetorial semântica é suficiente.
+    3.  **Formato JSON:** Retorne APENAS o JSON da ferramenta.
+
+    ### Exemplos
+
+    **Exemplo 1: Pergunta Específica**
+    Histórico: []
+    Usuário: "Qual o total de consumo da CREDIFY?"
+    Retorno:
+    {"tool": "vector_search_tool", "input": {"query": "total de consumo da CREDIFY", "filters": {}}}
+
+    **Exemplo 2: Pergunta Vaga**
+    Histórico: [ { "role": "user", "content": "Me fale sobre o iFood" }, { "role": "assistant", "content": "(Relatório do iFood...)" } ]
+    Usuário: "e da SEM PARAR?"
+    Retorno:
+    {"tool": "vector_search_tool", "input": {"query": "relatório completo da SEM PARAR", "filters": {}}}
+
+    **Exemplo 3: Pergunta de Continuação**
+    Histórico: [ { "role": "user", "content": "relatorio do representante pedro maia" }, { "role": "assistant", "content": "(Relatório completo do Pedro Maia...)" } ]
+    Usuário: "agora quero do mario monteiro"
+    Retorno:
+    {"tool": "vector_search_tool", "input": {"query": "relatório completo do representante mario monteiro", "filters": {}}}
+    
+    **Exemplo 4: Pergunta Geral**
+    Histórico: [ ... ]
+    Usuário: "muito obrigado"
+    Retorno:
+    {"tool": "none", "input": "muito obrigado"}
+`.trim();
+        const messages = [
+            { role: "system", content: systemPrompt },
+            ...sessionHistory,
+        ];
+        try {
+            const response = yield OpenAiChatCompleiton(messages);
+            let toolCall;
+            try {
+                if (response)
+                    toolCall = JSON.parse(response);
+            }
+            catch (error) {
+                try {
+                    toolCall = eval(`(${response})`);
+                }
+                catch (error) {
+                    return { tool: "none", input: userInput };
+                }
+            }
+            return {
+                tool: toolCall.tool || "none",
+                input: toolCall.input || userInput
+            };
+        }
+        catch (error) {
+            console.log("error no toolSelector", error);
+            return { tool: "none", input: userInput };
+        }
+    });
+}
+function getLlmResponse(messages, systemMessageContet) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(messages);
+        const systemMessage = { role: "system", content: `${systemMessageContet}\n\n${MARKDOWN_RESPONSE_POLICY}` };
+        let fullMessages;
+        if (messages.some((msg) => msg.role === 'system')) {
+            fullMessages = [...messages, systemMessage];
+        }
+        else {
+            fullMessages = [systemMessage, ...messages];
+        }
+        const response = yield OpenAiChatCompleiton(fullMessages);
+        return response;
+    });
+}
+function generateResponse(sessionId, userInput) {
+    return __awaiter(this, void 0, void 0, function* () {
+        yield (0, memory_1.storeChatMessage)(sessionId, "user", userInput);
+        const sessionHistory = yield (0, memory_1.retrieverSessionHistory)(sessionId);
+        const llmInput = [...sessionHistory];
+        const { tool, input: toolInput } = yield toolSelector(userInput, sessionHistory);
+        console.log("Tool selecionada:", tool);
+        let response;
+        if (tool === "vector_search_tool") {
+            const finalFilters = {
+                "month": sessionId
+            };
+            const finalToolInput = {
+                query: toolInput.query,
+                filters: finalFilters
+            };
+            const contextResults = yield (0, tools_1.vectorSearchTool)(finalToolInput);
+            const context = contextResults.map(doc => { var _a; return ((_a = doc.document) === null || _a === void 0 ? void 0 : _a.pageContent) || JSON.stringify(doc); }).join('\n---\n');
+            const systemMessageContent = `
+            Você é um analista financeiro sênior. Sua tarefa é usar o contexto JSON fornecido para responder perguntas, calcular métricas financeiras e agregar dados sob demanda.
+
+            ### 1. Dicionário de Campos-Chave (Blocos de Construção)
+            (Use estes campos para todos os cálculos)
+            * 'totalConsumptions': O **Volume** (número total de transações/consultas).
+            * 'totalValueInCents': A **Receita Bruta** (valor total, ANTES de descontos).
+            * 'totalValueWithDiscountInCents': A **Receita Pós-Desconto** (base para cálculos de lucro).
+            * 'totalSourcesCostInCents': O **Custo Direto** (custo de insumos).
+            * 'company.name', 'representative.name', 'organization.name': Campos de agrupamento.
+
+            ### 2. Regra de Formatação Monetária (Obrigatória e Crítica)
+            Esta é a regra mais importante. Os campos "InCents" NÃO são centavos comuns. Eles possuem 4 casas decimais de precisão.
+
+            **NÃO FAÇA ISSO (ERRADO):**
+            * NUNCA divida o valor por 100.
+            * Exemplo ERRADO: O valor '172800' dividido por 100 é 1728,00. **ISSO ESTÁ INCORRETO.**
+            * Exemplo ERRADO: O valor '128900000' dividido por 100 é 1289000,00. **ISSO ESTÁ INCORRETO.**
+
+            **FAÇA ISSO (CORRETO):**
+            * Você **DEVE OBRIGATORIAMENTE DIVIDIR o valor por 10.000** (dez mil).
+            * **Exemplo Correto 1:** O valor '172800' DEVE ser '172800 / 10000' = **17.28**. Formato final: **R$ 17,28**.
+            * **Exemplo Correto 2:** O valor '128900000' DEVE ser '128900000 / 10000' = **12890.00**. Formato final: **R$ 12.890,00**.
+            * **Exemplo Correto 3:** O valor '513831500' DEVE ser '513831500 / 10000' = **51383.15**. Formato final: **R$ 51.383,15**.
+            
+            Repito: para converter 'InCents' para Reais, **SEMPRE DIVIDA POR 10.000**.
+
+            ### 3. Regras de Raciocínio e Cálculo
+            * **Flexibilidade:** Use seu conhecimento financeiro para combinar os "Blocos de Construção" e calcular métricas (Rentabilidade, Margem de Lucro, Custo por Consumo, etc.).
+            * **Agregação:** Se o usuário pedir um total "por representante" ou "geral", você DEVE inspecionar TODOS os documentos JSON no contexto, agrupar e SOMAR os valores.
+            * **Exemplos de Cálculo:**
+                * **Receita Líquida (Lucro Bruto):** \`'totalValueWithDiscountInCents' - 'totalSourcesCostInCents'\`
+                * **Rentabilidade (Margem de Custo):** \`('totalSourcesCostInCents' / 'totalValueWithDiscountInCents')\` (Exiba como %)
+
+            ### 4. FORMATAÇÃO DA RESPOSTA (MARKDOWN OBRIGATÓRIO)
+            Você DEVE formatar suas respostas usando **Markdown**.
+
+            **Regras de Formatação:**
+            1.  **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
+            2.  **Negrito:** Use \`**texto**\` para destacar valores importantes, nomes e totais.
+            3.  **Listas:** Use listas numeradas ou com marcadores.
+            4.  **Tabelas:** Use tabelas Markdown para comparações de múltiplas empresas ou representantes.
+            5.  **Código Inline:** Use \`texto\` (crases) para valores técnicos (CNPJ, IDs).
+            6.  **Separação:** Use \`---\` para separar seções.
+            7.  **Emojis (Opcional):** Use com moderação (ex: 📊, 💰).
+
+            **Exemplos de Respostas Formatadas:**
+
+            **Exemplo 1 (Valor Único):**
+            \`\`\`
+            ## 💰 Receita Líquida da Ifood
+            
+            A receita líquida (Lucro Bruto) da **Ifood** é de **R$ 39.813,55**.
+            
+            * **Receita Pós-Desconto:** R$ 51.383,15
+            * **Custo Direto:** R$ 11.569,60
+            \`\`\`
+
+            **Exemplo 2 (Tabela de Agregação):**
+            \`\`\`
+            ## 📊 Rentabilidade por Representante
+
+            | Representante | Receita Líquida | Custo Direto | Rentabilidade (Margem de Custo) |
+            |---------------|-----------------|--------------|---------------------------------|
+            | Pedro Maia    | R$ 90.123,45    | R$ 15.123,00 | 16.78%                          |
+            | Mario Monteiro| R$ 70.456,12    | R$ 10.456,00 | 14.84%                          |
+            
+            ---
+            O representante **Pedro Maia** possui a maior rentabilidade.
+            \`\`\`
+
+            ### 5. Processo de Resposta
+            1.  Analise o pedido do usuário (ex: "rentabilidade por representante").
+            2.  Localize os objetos JSON relevantes no 'Contexto:' abaixo.
+            3.  Aplique as **Regras de Raciocínio e Cálculo** (Seção 3).
+            4.  Aplique a **Regra de Formatação Monetária CORRETA (Seção 2)**.
+            5.  Formate a resposta final seguindo as **Regras de Formatação Markdown** (Seção 4).
+            6.  Se os dados não existirem, diga 'EU NÃO SEI'.
+
+            Contexto:
+            ${context}`.trim();
+            response = yield getLlmResponse(llmInput, systemMessageContent);
+        }
+        else if (tool === "calculator_tool") {
+            response = (0, tools_1.calculatorTool)(toolInput);
+        }
+        else {
+            const systemMessageContent = `
+            Você é um assistente prestativo. Responda à solicitação do usuário da melhor forma possível com base no histórico da conversa.
+
+            **FORMATAÇÃO DA RESPOSTA (MARKDOWN OBRIGATÓIO):**
+            Você DEVE formatar suas respostas usando **Markdown**.
+
+            **Regras de Formatação:**
+            1.  **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
+            2.  **Negrito:** Use \`**texto**\` para destacar partes importantes.
+            3.  **Listas:** Use listas numeradas ou com marcadores.
+            4.  **Código Inline:** Use \`texto\` (crases) para valores técnicos, se houver.
+            5.  **Separação:** Use \`---\` para separar seções.
+        `.trim();
+            response = yield getLlmResponse(llmInput, systemMessageContent);
+        }
+        yield (0, memory_1.storeChatMessage)(sessionId, "system", response);
+        return response;
+    });
+}

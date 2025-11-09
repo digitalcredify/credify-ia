@@ -1,74 +1,73 @@
 
 import { openAIClient, openAiEmbbeding, vectorCollection } from "../config";
-import * as fs from 'fs';
-import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { traceable } from "langsmith/traceable";
+
 
 const EMBEDDING_DIMENSIONS = 1536;
 
-export async function getEmbedding(data: string) {
-    try {
+export const getEmbedding = traceable(
+    async function getEmbedding(data: string) {
         const response = await openAIClient.embeddings.create({
             input: data,
-            model: 'text-embedding-3-small', 
+            model: 'text-embedding-3-small',
         });
+        return response.data[0].embedding;
+    },
+    { name: "Get Embedding", run_type: "llm" }
+);
 
-        if (response.data && response.data.length > 0) {
-            return response.data[0].embedding;
-        }
-        throw new Error("Nenhum embedding encontrado na OpenAI response.");
 
-    } catch (error) {
-        console.error("Erro ao gerar o embedding da OpenAI:", error);
-        return null;
-    }
-}
+export const ingestData = traceable(
+    async function ingestData(jsonData: any, month: string) {
+        console.log('Iniciando ingestão de dados...');
 
-export async function ingestData(jsonData: any, month: string) {
-    console.log('Iniciando ingestão de dados...');
+        try {
+            const documents = jsonData.data;
+            if (!Array.isArray(documents)) {
+                throw new Error("O JSON recebido não contém um array 'data'.");
+            }
 
-    try {
-        const documents = jsonData.data;
-        if(!Array.isArray(documents)){
-            throw new Error("O JSON recebido não contém um array 'data'.");
-        }
+            console.log(`Documentos JSON encontrados: ${documents.length}`);
 
-        console.log(`Documentos JSON encontrados: ${documents.length}`);
-
-        const insertDocuments = await Promise.all(documents.map(async (doc: any) => {
-            const textToEmbed = `
+            const insertDocuments = await Promise.all(documents.map(async (doc: any) => {
+                const textToEmbed = `
                 Empresa: ${doc.company?.name ?? 'N/A'}
                 Plano: ${doc.plan?.name ?? 'N/A'}
                 Organização: ${doc.organization?.name ?? 'N/A'}
                 Representante: ${doc.representative?.name ?? 'N/A'}
             `;
 
-            const embedding = await getEmbedding(textToEmbed)
+                const embedding = await getEmbedding(textToEmbed)
 
-            return {
-                ...doc,
-                embedding: embedding,
-                month: month
+                return {
+                    ...doc,
+                    embedding: embedding,
+                    month: month
+                }
+
+            }))
+
+            const validDocuments = insertDocuments.filter(d => d.embedding);
+            if (validDocuments.length === 0) {
+                throw new Error("Nenhum documento foi 'embedado' com sucesso.");
             }
 
-        }))
+            await vectorCollection.deleteMany({ month: month });
+            const result = await vectorCollection.insertMany(validDocuments, { ordered: false });
 
-        const validDocuments = insertDocuments.filter(d => d.embedding);
-        if (validDocuments.length === 0) {
-             throw new Error("Nenhum documento foi 'embedado' com sucesso.");
+            console.log(`Documentos JSON inseridos para ${month}: ${result.insertedCount}`);
+            return result.insertedCount;
+
+        } catch (error) {
+            console.error("Erro de ingestão:", error);
+            throw error;
         }
+    },
+    { name: "Ingest Data", run_type: "tool" }
 
-        await vectorCollection.deleteMany({ month: month });
-        const result = await vectorCollection.insertMany(validDocuments, { ordered: false });
+)
 
-        console.log(`Documentos JSON inseridos para ${month}: ${result.insertedCount}`);
-        return result.insertedCount;
 
-    } catch (error) {
-        console.error("Erro de ingestão:", error);
-        throw error;
-    }
-}
 
 export async function createVectorIndex() {
     try {
@@ -119,21 +118,21 @@ export async function createVectorIndex() {
     }
 }
 
-export async function checkIfDataExists(month:string) {
+export async function checkIfDataExists(month: string) {
 
     console.log(`Verificando se dados para o mês ${month} já existem...`);
 
     try {
         const doc = await vectorCollection.findOne({ month: month });
 
-        if(doc){
+        if (doc) {
             console.log(`Dados para ${month} encontrados.`);
             return true;
 
         }
         console.log(`Dados para ${month} não encontrados.`);
         return false;
-        
+
     } catch (error) {
         console.error("Erro ao verificar dados:", error);
         return false;

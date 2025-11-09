@@ -6,32 +6,37 @@
 */
 
 import { memoryCollection } from "./config"
+import { traceable } from "langsmith/traceable";
 
 
-export async function storeChatMessage(sessionId:any, role:any, content:any) {
 
-    const message = {
-        session_id: sessionId,
-        role,
-        content,
-        timestamp: new Date()
-    }
-    await memoryCollection.insertOne(message);
-}
+export const storeChatMessage = traceable(
+    async function storeChatMessage(sessionId: string, role: string, content: string) {
+        await memoryCollection.insertOne({
+            session_id: sessionId,
+            role: role,
+            content: content,
+            timestamp: new Date()
+        });
+    },
+    { name: "Store Chat Message", run_type: "tool" }
+);
 
-export async function retrieverSessionHistory(sessionId:any) {
-    const cursor = memoryCollection
-        .find({ session_id: sessionId })
-        .sort({ timestamp: 1 });
 
-    const messages:any[] = []
-    await cursor.forEach(msg => {
-        messages.push({ role: msg.role, content: msg.content });
-    });
-    return messages;
+export const retrieverSessionHistory = traceable(
+    async function retrieverSessionHistory(sessionId: string) {
+        const history = await memoryCollection
+            .find({ session_id: sessionId })
+            .sort({ timestamp: 1 })
+            .toArray();
         
-    
-}
+        return history.map(msg => ({
+            role: msg.role,
+            content: msg.content
+        }));
+    },
+    { name: "Retrieve Session History", run_type: "retriever" }
+);
 
 export async function clearAllChatHistory() {
     try {
