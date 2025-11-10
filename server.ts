@@ -2,7 +2,9 @@ import express from 'express';
 import agent from './src/routes/agentRoute';
 import cors from 'cors';
 import { ensureMongoConnection, closeMongoConnection } from './src/config';
-import { clearAllChatHistory } from './src/memory';  // ✅ ADICIONAR
+import { clearAllChatHistory } from './src/memory';  
+import agentRouteStreaming from './src/routes/agentRoute_streaming';
+
 
 const app = express();
 const PORT = 3010;
@@ -10,6 +12,7 @@ const PORT = 3010;
 app.use(cors());
 app.use(express.json());
 app.use('/api', agent);
+app.use('/api', agentRouteStreaming);
 
 async function startServer() {
     try {

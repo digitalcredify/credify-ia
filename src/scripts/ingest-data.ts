@@ -56,6 +56,11 @@ export const ingestData = traceable(
             const result = await vectorCollection.insertMany(validDocuments, { ordered: false });
 
             console.log(`Documentos JSON inseridos para ${month}: ${result.insertedCount}`);
+            
+            // ✅ ADICIONADO: Aguarda índice vetorial ser atualizado
+            console.log(`⏳ Aguardando índice vetorial ser atualizado...`);
+            await waitForIndexUpdate(result.insertedCount, month);
+            
             return result.insertedCount;
 
         } catch (error) {
@@ -67,6 +72,57 @@ export const ingestData = traceable(
 
 )
 
+// ✅ NOVA FUNÇÃO: Aguarda o índice vetorial ser atualizado
+async function waitForIndexUpdate(expectedCount: number, month: string, maxWaitTime: number = 30000) {
+    console.log(`📊 Esperando ${expectedCount} documentos do mês ${month} ficarem disponíveis para busca vetorial`);
+    
+    const startTime = Date.now();
+    const pollInterval = 1000; 
+    
+    while (Date.now() - startTime < maxWaitTime) {
+        try {
+            const testEmbedding = await getEmbedding("test");
+            
+            const pipeline = [
+                {
+                    $vectorSearch: {
+                        index: "vector_index",
+                        queryVector: testEmbedding,
+                        path: "embedding",
+                        numCandidates: expectedCount + 100,
+                        limit: expectedCount,
+                        filter: { month: month } 
+                    }
+                },
+                {
+                    $count: "total"
+                }
+            ];
+            
+            const result = await vectorCollection.aggregate(pipeline).toArray();
+            const indexedCount = result[0]?.total || 0;
+            
+            console.log(`📊 Documentos indexados: ${indexedCount}/${expectedCount}`);
+            
+            if (indexedCount >= expectedCount * 0.9) {
+                console.log(`✅ Índice vetorial atualizado! (${indexedCount} documentos disponíveis)`);
+                return true;
+            }
+            
+            // Aguarda antes de tentar novamente
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+            
+        } catch (error) {
+            console.warn(`⚠️ Erro ao verificar índice:`, error);
+            // Aguarda antes de tentar novamente
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+    }
+    
+    console.warn(`⚠️ Timeout ao aguardar atualização do índice (${maxWaitTime}ms)`);
+    console.warn(`⚠️ Continuando mesmo assim... Pode haver resultados inconsistentes.`);
+    return false;
+}
 
 
 export async function createVectorIndex() {

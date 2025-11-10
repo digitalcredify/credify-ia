@@ -1,16 +1,10 @@
 import dotenv from 'dotenv';
 import { MongoClient } from 'mongodb';
 import OpenAI from "openai";
-import { OpenAIEmbeddings } from "@langchain/openai";
-
-
-
-
-
+import { ChatOpenAI, OpenAIEmbeddings } from "@langchain/openai";
 
 dotenv.config();
 export const apiKeyOpenAi = process.env.API_KEY;
-
 
 export const MONGODB_URI = process.env.MONGODB_URI ?? '';
 export const mongoClient = new MongoClient(MONGODB_URI)
@@ -49,6 +43,30 @@ export async function ensureMongoConnection() {
     }
 }
 
+// ===== MODELOS LLM (OPÇÃO 1 CONSERVADORA) =====
+
+// Modelo rápido (gpt-4o-mini) - para cumprimentos
+export const fastModel = new ChatOpenAI({
+    model: "gpt-4o-mini",  
+    temperature: 0,
+    apiKey: apiKeyOpenAi
+
+});
+
+// ✅ ADICIONADO: Modelo balanceado (gpt-4o) - para toolSelector e agregação
+export const balancedModel = new ChatOpenAI({
+    model: "gpt-4o",
+    temperature: 0,
+    apiKey: apiKeyOpenAi
+
+});
+
+// Modelo avançado (gpt-5) - para perguntas complexas
+export const advancedModel = new ChatOpenAI({ 
+    model: "gpt-5",
+    // temperature: 0,
+    apiKey: apiKeyOpenAi
+});
 
 export async function closeMongoConnection() {
     if (isMongoConnected) {
@@ -57,14 +75,3 @@ export async function closeMongoConnection() {
         console.log("MongoDB desconectado.");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
