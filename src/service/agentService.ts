@@ -6,13 +6,10 @@ import { middleModel } from "../utils/models";
 import { runWebAgent } from "../agents/webAgent";
 import { runPdfAgent } from "../agents/pdfAgent";
 
-
-
 const routerSchema = z.object({
     routeName: z.enum(["web_agent", "pdf_agent"]).describe("A rota a ser usada. 'web_agent' para perguntas e respostas. 'pdf_agent' para pedidos de relatórios ou sumários em PDF."),
     reasoning: z.string().describe("Breve explicação do porquê esta rota foi escolhida")
 })
-
 
 const routerPromptTemplate = PromptTemplate.fromTemplate(`
     Você é um agente roteador.
@@ -49,15 +46,23 @@ const classifyRequest = async (pergunta: string) => {
 
 }
 
-
-const agentService = async (pergunta: string, jsonData: any, targetMonth:string) => {
+// ✅ ATUALIZADO: Adiciona parâmetro opcional onChunk
+const agentService = async (
+    pergunta: string, 
+    jsonData: any, 
+    targetMonth: string,
+    onChunk?: (chunk: string) => void  // ← NOVO: Callback para streaming
+) => {
 
     const routeDecision = await classifyRequest(pergunta)
 
     switch (routeDecision.routeName) {
         case 'web_agent':
-            return await runWebAgent(pergunta, jsonData, targetMonth)
+            // ✅ Passa o callback para runWebAgent
+            return await runWebAgent(pergunta, jsonData, targetMonth, onChunk)
+        
         case "pdf_agent":
+            // ❌ PDF não usa streaming (retorna buffer)
             return await runPdfAgent(targetMonth, pergunta);
 
         default:
@@ -65,9 +70,6 @@ const agentService = async (pergunta: string, jsonData: any, targetMonth:string)
                 messages: [new HumanMessage("Desculpe, não consegui entender sua solicitação.")]
             };
     }
-
-
-
 
 }
 

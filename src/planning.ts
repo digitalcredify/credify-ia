@@ -1,19 +1,17 @@
 import { traceable } from "langsmith/traceable";
 import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
-import { advancedModel, balancedModel, fastModel } from "./config";  // ← Adicione balancedModel
+import { advancedModel, balancedModel, fastModel } from "./config";
 import { storeChatMessage, retrieverSessionHistory } from "./memory";
-import { 
-    specificQueryTool, 
-    aggregateTool, 
-    hybridSearchTool,
-    calculatorTool 
-} from "./tools";
+import { specificQueryTool, aggregateTool, hybridSearchTool, calculatorTool } from "./tools";
 
-// ===== MUDANÇA 1: OpenAiChatCompleiton agora aceita parâmetro de modelo =====
+
+
+// ===== OpenAiChatCompleiton COM STREAMING (CORRIGIDO) =====
 export const OpenAiChatCompleiton = traceable(
     async function OpenAiChatCompleiton(
         messages: any,
-        modelType: "advanced" | "balanced" | "fast" = "advanced"  // ← NOVO PARÂMETRO
+        modelType: "advanced" | "balanced" | "fast" = "advanced",
+        onChunk?: (chunk: string) => void  // ← Callback para streaming (opcional)
     ): Promise<string> {
         try {
             const langchainMessages = messages.map((msg: any) => {
@@ -23,7 +21,7 @@ export const OpenAiChatCompleiton = traceable(
                 return new HumanMessage(msg.content); 
             });
 
-            // ✅ Seleciona o modelo baseado no parâmetro
+            // Seleciona o modelo
             let selectedModel;
             if (modelType === "advanced") {
                 selectedModel = advancedModel;
@@ -33,11 +31,32 @@ export const OpenAiChatCompleiton = traceable(
                 selectedModel = fastModel;
             }
 
-            const response = await selectedModel.invoke(langchainMessages);
-            return String(response.content);
+            // ✅ SE TEM CALLBACK: USA STREAMING
+            if (onChunk) {
+                const stream = await selectedModel.stream(langchainMessages);
+                let fullResponse = "";
+                
+                for await (const chunk of stream) {
+                    const content = String(chunk.content || "");
+                    
+                    // ✅ CORREÇÃO: Envia apenas o NOVO conteúdo, não o acumulado
+                    if (content) {
+                        onChunk(content);  // ← Envia apenas este chunk
+                    }
+                    
+                    fullResponse += content;  // ← Acumula localmente
+                }
+
+                return fullResponse;
+            } 
+            // ❌ SE NÃO TEM CALLBACK: USA INVOKE (sem streaming)
+            else {
+                const response = await selectedModel.invoke(langchainMessages);
+                return String(response.content);
+            }
 
         } catch (error) {
-            console.error("Error in openAIChatCompletion:", error);
+            console.error("Error in OpenAiChatCompletion:", error);
             throw error;
         }
     },
@@ -48,9 +67,9 @@ export const OpenAiChatCompleiton = traceable(
             provider: "OpenAI"
         }
     }
-) as (messages: any, modelType?: "advanced" | "balanced" | "fast") => Promise<string>;
+) as (messages: any, modelType?: "advanced" | "balanced" | "fast", onChunk?: (chunk: string) => void) => Promise<string>;
 
-// ===== toolSelector (USA GPT-4o) =====
+// ===== toolSelector (MANTÉM ORIGINAL) =====
 export const toolSelector = traceable(
     async function toolSelector(
         userInput: any, 
@@ -185,7 +204,7 @@ export const toolSelector = traceable(
         ]
 
         try {
-            // ✅ USA GPT-4o (BALANCEADO)
+            // ✅ USA GPT-4o (BALANCEADO) - SEM STREAMING (mais rápido)
             const response = await OpenAiChatCompleiton(messages, "balanced");
             let toolCall;
 
@@ -247,20 +266,21 @@ export const toolSelector = traceable(
     }
 ) as (userInput: any, sessionHistory?: any[]) => Promise<{ tool: string; input: any }>;
 
-// ===== MUDANÇA 2: getLlmResponse agora aceita parâmetro de modelo =====
+// ===== getLlmResponse COM STREAMING =====
 const getLlmResponse = traceable(
     async function getLlmResponse(
         messages: any, 
         systemMessageContent: any,
-        modelType: "advanced" | "balanced" | "fast" = "advanced"  // ← NOVO PARÂMETRO
+        modelType: "advanced" | "balanced" | "fast" = "advanced",
+        onChunk?: (chunk: string) => void  // ← Callback para streaming (opcional)
     ): Promise<string> {
         const fullMessages = [
             { role: "system", content: systemMessageContent },
             ...messages
         ];
 
-        // ✅ Usa o modelo especificado
-        const response = await OpenAiChatCompleiton(fullMessages, modelType);
+        // ✅ Passa o callback para OpenAiChatCompleiton
+        const response = await OpenAiChatCompleiton(fullMessages, modelType, onChunk);
         return response;
     },
     {
@@ -270,12 +290,14 @@ const getLlmResponse = traceable(
             purpose: "Generate final response with system prompt"
         }
     }
-) as (messages: any, systemMessageContent: any, modelType?: "advanced" | "balanced" | "fast") => Promise<string>;
+) as (messages: any, systemMessageContent: any, modelType?: "advanced" | "balanced" | "fast", onChunk?: (chunk: string) => void) => Promise<string>;
 
+// ===== generateResponse COM STREAMING =====
 export const generateResponse = traceable(
     async function generateResponse(
         sessionId: any, 
-        userInput: any
+        userInput: any,
+        onChunk?: (chunk: string) => void  // ← Callback para streaming (opcional)
     ): Promise<string> {
         
         await storeChatMessage(sessionId, "user", userInput);
@@ -298,7 +320,7 @@ export const generateResponse = traceable(
             
             const contextResults = await specificQueryTool(finalToolInput);
             const context = contextResults
-                .map(doc => doc.document?.pageContent || JSON.stringify(doc))
+                .map((doc:any) => doc.document?.pageContent || JSON.stringify(doc))
                 .join('\n---\n');
             
             const systemMessageContent = `
@@ -312,8 +334,8 @@ export const generateResponse = traceable(
                 Contexto:
                 ${context}`.trim();
             
-            // ✅ USA GPT-5 (ALTA PRECISÃO)
-            response = await getLlmResponse(llmInput, systemMessageContent, "advanced");
+            // ✅ USA GPT-5 (ALTA PRECISÃO) + STREAMING
+            response = await getLlmResponse(llmInput, systemMessageContent, "advanced", onChunk);
         }
         
         // ===== TOOL 2: aggregate_tool (USA GPT-4o) =====
@@ -343,8 +365,8 @@ export const generateResponse = traceable(
                 Contexto (já agregado):
                 ${context}`.trim();
             
-            // ✅ USA GPT-4o (BALANCEADO - formatação simples)
-            response = await getLlmResponse(llmInput, systemMessageContent, "balanced");
+            // ✅ USA GPT-4o (BALANCEADO - formatação simples) + STREAMING
+            response = await getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
         }
         
         // ===== TOOL 3: hybrid_search_tool (USA GPT-5) =====
@@ -359,7 +381,7 @@ export const generateResponse = traceable(
             
             const contextResults = await hybridSearchTool(finalToolInput);
             const context = contextResults
-                .map(doc => doc.document?.pageContent || JSON.stringify(doc))
+                .map((doc:any) => doc.document?.pageContent || JSON.stringify(doc))
                 .join('\n---\n');
             
             const systemMessageContent = `
@@ -373,14 +395,19 @@ export const generateResponse = traceable(
                 Contexto:
                 ${context}`.trim();
             
-            // ✅ USA GPT-5 (ALTA INTELIGÊNCIA)
-            response = await getLlmResponse(llmInput, systemMessageContent, "advanced");
+            // ✅ USA GPT-5 (ALTA INTELIGÊNCIA) + STREAMING
+            response = await getLlmResponse(llmInput, systemMessageContent, "advanced", onChunk);
         }
         
         // ===== TOOL 4: calculator_tool =====
         else if (tool === "calculator_tool") {
             console.log("🧮 Executando calculator_tool...");
             response = calculatorTool(toolInput);
+            
+            // Envia resposta de uma vez (não é LLM)
+            if (onChunk) {
+                onChunk(response);
+            }
         }
         
         // ===== TOOL 5: none (USA GPT-4o-mini) =====
@@ -392,8 +419,8 @@ export const generateResponse = traceable(
                 Use Markdown se necessário.
             `.trim();
             
-            // ✅ USA GPT-4o-mini (RÁPIDO)
-            response = await getLlmResponse(llmInput, systemMessageContent, "fast");
+            // ✅ USA GPT-4o-mini (RÁPIDO) + STREAMING
+            response = await getLlmResponse(llmInput, systemMessageContent, "fast", onChunk);
         }
 
         await storeChatMessage(sessionId, "system", response);
@@ -404,7 +431,7 @@ export const generateResponse = traceable(
         name: "Generate Response",
         run_type: "chain",
         metadata: {
-            purpose: "Main orchestration with optimized model selection"
+            purpose: "Main orchestration with optimized model selection and streaming"
         }
     }
-) as (sessionId: any, userInput: any) => Promise<string>;
+) as (sessionId: any, userInput: any, onChunk?: (chunk: string) => void) => Promise<string>;
