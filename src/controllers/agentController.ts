@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import agentService from '../service/agentService';
 
-// ===== CONTROLLER SEM STREAMING (Original - Mantém) =====
 export const agentController = async (req: Request, res: Response) => {
     try {
         const { pergunta, jsonData, targetMonth } = req.body;
@@ -13,33 +12,6 @@ export const agentController = async (req: Request, res: Response) => {
         }
 
         console.log(`📝 Pergunta recebida: "${pergunta}"`);
-        console.log(`📅 Mês alvo: ${targetMonth}`);
-
-        // ✅ Chama agentService SEM callback (modo normal)
-        const response = await agentService(pergunta, jsonData, targetMonth);
-
-        return res.status(200).json({ response });
-
-    } catch (error) {
-        console.error("❌ Erro no agentController:", error);
-        return res.status(500).json({
-            error: error instanceof Error ? error.message : "Erro interno do servidor"
-        });
-    }
-};
-
-// ===== CONTROLLER COM STREAMING (Novo) =====
-export const agentControllerStreaming = async (req: Request, res: Response) => {
-    try {
-        const { pergunta, jsonData, targetMonth } = req.body;
-
-        if (!pergunta || !jsonData || !targetMonth) {
-            return res.status(400).json({
-                error: "Campos obrigatórios: pergunta, jsonData, targetMonth"
-            });
-        }
-
-        console.log(`📝 Pergunta recebida (streaming): "${pergunta}"`);
         console.log(`📅 Mês alvo: ${targetMonth}`);
 
         // ✅ Configura headers para Server-Sent Events (SSE)
@@ -76,7 +48,7 @@ export const agentControllerStreaming = async (req: Request, res: Response) => {
         }
 
     } catch (error) {
-        console.error("❌ Erro no agentControllerStreaming:", error);
+        console.error("❌ Erro no agentController:", error);
         
         if (!res.headersSent) {
             res.status(500).json({
