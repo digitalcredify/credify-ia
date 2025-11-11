@@ -60,10 +60,8 @@ export const agentControllerStreaming = async (req: Request, res: Response) => {
         };
 
         try {
-            // ✅ Chama agentService COM callback (modo streaming)
             await agentService(pergunta, jsonData, targetMonth, onChunk);
 
-            // Envia mensagem final
             res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`);
             res.end();
 

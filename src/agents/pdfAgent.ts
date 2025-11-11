@@ -391,7 +391,6 @@ async function generateHtmlFromReport(reportMarkdown: string, history: any[]) {
             { role: "system", content: systemPrompt },
             { role: "user", content: "Gere o HTML completo do relatório seguindo exatamente a estrutura fornecida." }
         ],
-        // temperature: 0.3, // Baixa temperatura para consistência
     });
 
     return response.choices[0].message.content || "";

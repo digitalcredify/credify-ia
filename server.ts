@@ -18,13 +18,13 @@ async function startServer() {
     try {
         console.log("🔄 Iniciando aplicação...");
         
-        // 1. Conecta ao MongoDB
+        
         await ensureMongoConnection();
         
-        // 2. ✅ Limpa histórico de chat
+        
         await clearAllChatHistory();
         
-        // 3. Inicia o servidor
+        
         app.listen(PORT, () => {
             console.log(`🚀 Servidor rodando na porta ${PORT}`);
         });

@@ -46,23 +46,23 @@ const classifyRequest = async (pergunta: string) => {
 
 }
 
-// ✅ ATUALIZADO: Adiciona parâmetro opcional onChunk
+
 const agentService = async (
     pergunta: string, 
     jsonData: any, 
     targetMonth: string,
-    onChunk?: (chunk: string) => void  // ← NOVO: Callback para streaming
+    onChunk?: (chunk: string) => void  
 ) => {
 
     const routeDecision = await classifyRequest(pergunta)
 
     switch (routeDecision.routeName) {
         case 'web_agent':
-            // ✅ Passa o callback para runWebAgent
+            
             return await runWebAgent(pergunta, jsonData, targetMonth, onChunk)
         
         case "pdf_agent":
-            // ❌ PDF não usa streaming (retorna buffer)
+            
             return await runPdfAgent(targetMonth, pergunta);
 
         default:

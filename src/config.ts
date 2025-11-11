@@ -43,9 +43,7 @@ export async function ensureMongoConnection() {
     }
 }
 
-// ===== MODELOS LLM (OPÇÃO 1 CONSERVADORA) =====
 
-// Modelo rápido (gpt-4o-mini) - para cumprimentos
 export const fastModel = new ChatOpenAI({
     model: "gpt-4o-mini",  
     temperature: 0,
@@ -53,7 +51,6 @@ export const fastModel = new ChatOpenAI({
 
 });
 
-// ✅ ADICIONADO: Modelo balanceado (gpt-4o) - para toolSelector e agregação
 export const balancedModel = new ChatOpenAI({
     model: "gpt-4o",
     temperature: 0,
@@ -61,10 +58,9 @@ export const balancedModel = new ChatOpenAI({
 
 });
 
-// Modelo avançado (gpt-5) - para perguntas complexas
 export const advancedModel = new ChatOpenAI({ 
     model: "gpt-5",
-    // temperature: 0,
+
     apiKey: apiKeyOpenAi
 });
 

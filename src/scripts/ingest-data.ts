@@ -57,7 +57,6 @@ export const ingestData = traceable(
 
             console.log(`Documentos JSON inseridos para ${month}: ${result.insertedCount}`);
             
-            // ✅ ADICIONADO: Aguarda índice vetorial ser atualizado
             console.log(`⏳ Aguardando índice vetorial ser atualizado...`);
             await waitForIndexUpdate(result.insertedCount, month);
             
@@ -72,7 +71,6 @@ export const ingestData = traceable(
 
 )
 
-// ✅ NOVA FUNÇÃO: Aguarda o índice vetorial ser atualizado
 async function waitForIndexUpdate(expectedCount: number, month: string, maxWaitTime: number = 30000) {
     console.log(`📊 Esperando ${expectedCount} documentos do mês ${month} ficarem disponíveis para busca vetorial`);
     
@@ -109,12 +107,10 @@ async function waitForIndexUpdate(expectedCount: number, month: string, maxWaitT
                 return true;
             }
             
-            // Aguarda antes de tentar novamente
             await new Promise(resolve => setTimeout(resolve, pollInterval));
             
         } catch (error) {
             console.warn(`⚠️ Erro ao verificar índice:`, error);
-            // Aguarda antes de tentar novamente
             await new Promise(resolve => setTimeout(resolve, pollInterval));
         }
     }

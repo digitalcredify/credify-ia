@@ -3,12 +3,12 @@ import { checkIfDataExists, createVectorIndex, ingestData } from "../scripts/ing
 import { generateResponse } from "../planning";
 import { isCurrentMonth } from "../utils/dateUtils";  
 
-// ✅ ATUALIZADO: Adiciona parâmetro opcional onChunk
+
 export const runWebAgent = async (
     pergunta: string, 
     jsonData: any, 
     targetMonth: string,
-    onChunk?: (chunk: string) => void  // ← NOVO: Callback para streaming
+    onChunk?: (chunk: string) => void  
 ) => {
     
     try {
@@ -39,7 +39,7 @@ export const runWebAgent = async (
             }
         }
 
-        // ✅ Passa o callback para generateResponse
+        
         const response = await generateResponse(targetMonth, pergunta, onChunk);
         return response;
 
