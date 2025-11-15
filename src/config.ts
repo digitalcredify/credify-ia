@@ -17,6 +17,8 @@ export const openAIClient = new OpenAI({ apiKey: apiKeyOpenAi,});
 export const VOYAGE_MODEL = "voyage-3-large";
 export const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY;
 export const OPENAI_MODEL = "gpt-5-2025-08-07";
+export const ENABLE_STREAMING = process.env.ENABLE_STREAMING !== 'false'; 
+
 
 let isMongoConnected = false;
 

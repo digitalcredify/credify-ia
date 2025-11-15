@@ -316,18 +316,44 @@ export const generateResponse = traceable(
                 .join('\n---\n');
             
             const systemMessageContent = `
-                Você é um analista financeiro. Responda usando o contexto.
-                
-                REGRA CRÍTICA: Campos "InCents" têm 4 casas decimais.
-                SEMPRE DIVIDA POR 10.000 para converter para Reais.
-                
-                Use Markdown com títulos, negrito, tabelas.
-                
-                Contexto:
-                ${context}`.trim();
+Você é um analista financeiro experiente. Responda usando o contexto fornecido.
+
+**FORMATAÇÃO MONETÁRIA:**
+- Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
+- Exemplo correto: R$ 316.852,50
+- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- NUNCA use vírgula para separador de milhares
+
+**CONVERSÃO DE VALORES:**
+- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
+- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
+
+### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
+
+Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
+
+**Regras de Formatação:**
+1. **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
+2. **Negrito:** Use \`**texto**\` para destacar partes importantes.
+3. **Tabelas:** Sempre que houver comparação, agregação ou múltiplos itens (empresas, representantes, meses, etc.), use tabelas Markdown no formato:
+
+   | Campo | Valor |
+   |--------|--------|
+   | Exemplo | R$ 1.234,56 |
+
+4. **Código Inline:** Use crases \`texto\` para IDs, nomes técnicos, ou campos JSON.
+5. **Separadores:** Use \`---\` para separar blocos de informação.
+6. **Listas:** Use listas numeradas ou com marcadores para explicar passos, métricas ou observações.
+7. **Emojis (opcional):** Pode usar ícones (📊, 💰, ⚙️) para dar contexto visual.
+8. **Proibido:** Não retornar texto puro sem Markdown.
+- Seja conciso mas informativo
+
+
+Contexto:
+${context}`.trim();
             
             
-            response = await getLlmResponse(llmInput, systemMessageContent, "advanced", onChunk);
+            response = await getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
         }
         
         
@@ -346,16 +372,41 @@ export const generateResponse = traceable(
             const context = JSON.stringify(contextData, null, 2);
             
             const systemMessageContent = `
-                Você é um analista financeiro. Os dados JÁ ESTÃO AGREGADOS.
-                NÃO precisa somar novamente! Apenas formate.
-                
-                REGRA CRÍTICA: Campos "InCents" têm 4 casas decimais.
-                SEMPRE DIVIDA POR 10.000 para converter para Reais.
-                
-                Use Markdown com tabela. Ordene por receita líquida.
-                
-                Contexto (já agregado):
-                ${context}`.trim();
+Você é um analista financeiro experiente. Os dados fornecidos JÁ ESTÃO AGREGADOS.
+NÃO precisa somar ou agrupar novamente! Apenas formate e analise.
+
+**FORMATAÇÃO MONETÁRIA:**
+- Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
+- Exemplo correto: R$ 316.852,50
+- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- NUNCA use vírgula para separador de milhares
+
+**CONVERSÃO DE VALORES:**
+- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
+- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
+
+### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
+
+Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
+
+**Regras de Formatação:**
+1. **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
+2. **Negrito:** Use \`**texto**\` para destacar partes importantes.
+3. **Tabelas:** Sempre que houver comparação, agregação ou múltiplos itens (empresas, representantes, meses, etc.), use tabelas Markdown no formato:
+
+   | Campo | Valor |
+   |--------|--------|
+   | Exemplo | R$ 1.234,56 |
+
+4. **Código Inline:** Use crases \`texto\` para IDs, nomes técnicos, ou campos JSON.
+5. **Separadores:** Use \`---\` para separar blocos de informação.
+6. **Listas:** Use listas numeradas ou com marcadores para explicar passos, métricas ou observações.
+7. **Emojis (opcional):** Pode usar ícones (📊, 💰, ⚙️) para dar contexto visual.
+8. **Proibido:** Não retornar texto puro sem Markdown.
+- Seja conciso mas informativo
+
+Contexto (já agregado por ${toolInput.groupBy}):
+${context}`.trim();
             
             
             response = await getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
@@ -377,18 +428,43 @@ export const generateResponse = traceable(
                 .join('\n---\n');
             
             const systemMessageContent = `
-                Você é um analista financeiro. Faça uma análise abrangente.
-                
-                REGRA CRÍTICA: Campos "InCents" têm 4 casas decimais.
-                SEMPRE DIVIDA POR 10.000 para converter para Reais.
-                
-                Use Markdown com títulos, tabelas, listas.
-                
-                Contexto:
-                ${context}`.trim();
+Você é um analista financeiro experiente. Faça uma análise abrangente e detalhada.
+
+**FORMATAÇÃO MONETÁRIA:**
+- Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
+- Exemplo correto: R$ 316.852,50
+- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- NUNCA use vírgula para separador de milhares
+
+**CONVERSÃO DE VALORES:**
+- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
+- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
+
+### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
+
+Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
+
+**Regras de Formatação:**
+1. **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
+2. **Negrito:** Use \`**texto**\` para destacar partes importantes.
+3. **Tabelas:** Sempre que houver comparação, agregação ou múltiplos itens (empresas, representantes, meses, etc.), use tabelas Markdown no formato:
+
+   | Campo | Valor |
+   |--------|--------|
+   | Exemplo | R$ 1.234,56 |
+
+4. **Código Inline:** Use crases \`texto\` para IDs, nomes técnicos, ou campos JSON.
+5. **Separadores:** Use \`---\` para separar blocos de informação.
+6. **Listas:** Use listas numeradas ou com marcadores para explicar passos, métricas ou observações.
+7. **Emojis (opcional):** Pode usar ícones (📊, 💰, ⚙️) para dar contexto visual.
+8. **Proibido:** Não retornar texto puro sem Markdown.
+- Seja direto mas completo
+
+Contexto:
+${context}`.trim();
             
             
-            response = await getLlmResponse(llmInput, systemMessageContent, "advanced", onChunk);
+            response = await getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
         }
         
         
