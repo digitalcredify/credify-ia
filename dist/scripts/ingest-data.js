@@ -1,4 +1,10 @@
 "use strict";
+/**
+ * @fileoverview
+ * este arquivo é responsável pela capacidade de busca do sistema. Oq ele faz?
+ * 1- Transforma os dados provenientes de um JSON em embeddings (vetores semânticos)
+ * 2- Armazena esses embeddings no MongoDB Atlas.
+ */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -8,149 +14,102 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __asyncValues = (this && this.__asyncValues) || function (o) {
-    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
-    var m = o[Symbol.asyncIterator], i;
-    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
-    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
-    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getEmbedding = getEmbedding;
-exports.ingestData = ingestData;
-exports.createVectorIndex = createVectorIndex;
+exports.ingestData = void 0;
 exports.checkIfDataExists = checkIfDataExists;
 const config_1 = require("../config");
-const EMBEDDING_DIMENSIONS = 1536;
-function getEmbedding(data) {
+const traceable_1 = require("langsmith/traceable");
+const documents_1 = require("@langchain/core/documents");
+const qdrant_1 = require("@langchain/qdrant");
+function deleteExistingDataForMonth(month) {
     return __awaiter(this, void 0, void 0, function* () {
+        console.log(`[Qdrant Ingest] 🗑️ Verificando e deletando dados existentes para o mês: ${month}`);
         try {
-            const response = yield config_1.openAIClient.embeddings.create({
-                input: data,
-                model: 'text-embedding-3-small',
+            const existingPoints = yield config_1.qdrantClient.scroll(config_1.QDRANT_COLLECTION_NAME, {
+                filter: {
+                    must: [
+                        { key: "month", match: { value: month } }
+                    ]
+                },
+                limit: 10000,
             });
-            if (response.data && response.data.length > 0) {
-                return response.data[0].embedding;
+            if (existingPoints.points.length > 0) {
+                const idsToDelete = existingPoints.points.map(point => point.id);
+                console.log(`[Qdrant Ingest] Deletando ${idsToDelete.length} pontos existentes...`);
+                yield config_1.qdrantClient.delete(config_1.QDRANT_COLLECTION_NAME, { points: idsToDelete });
+                console.log(`[Qdrant Ingest] ✅ Pontos antigos deletados.`);
             }
-            throw new Error("Nenhum embedding encontrado na OpenAI response.");
         }
         catch (error) {
-            console.error("Erro ao gerar o embedding da OpenAI:", error);
-            return null;
+            if (error.message.includes("Not found")) {
+                console.log("[Qdrant Ingest] Coleção não encontrada, será criada na primeira ingestão.");
+                return;
+            }
+            console.error("[Qdrant Ingest] ❌ Erro ao deletar dados antigos:", error);
+            throw error;
         }
     });
 }
-function ingestData(jsonData, month) {
+exports.ingestData = (0, traceable_1.traceable)(function ingestData(jsonData, month) {
     return __awaiter(this, void 0, void 0, function* () {
-        console.log('Iniciando ingestão de dados...');
+        console.log(`[Qdrant Ingest] Iniciando ingestão de dados para o mês: ${month}`);
         try {
             const documents = jsonData.data;
             if (!Array.isArray(documents)) {
                 throw new Error("O JSON recebido não contém um array 'data'.");
             }
-            console.log(`Documentos JSON encontrados: ${documents.length}`);
-            const insertDocuments = yield Promise.all(documents.map((doc) => __awaiter(this, void 0, void 0, function* () {
+            console.log(`[Qdrant Ingest] Documentos JSON encontrados: ${documents.length}`);
+            // deleta dados existente para o mês
+            yield deleteExistingDataForMonth(month);
+            // formatando o json para depois "embedar"
+            const langchainDocs = documents.map(doc => {
                 var _a, _b, _c, _d, _e, _f, _g, _h;
-                const textToEmbed = `
-                Empresa: ${(_b = (_a = doc.company) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : 'N/A'}
-                Plano: ${(_d = (_c = doc.plan) === null || _c === void 0 ? void 0 : _c.name) !== null && _d !== void 0 ? _d : 'N/A'}
-                Organização: ${(_f = (_e = doc.organization) === null || _e === void 0 ? void 0 : _e.name) !== null && _f !== void 0 ? _f : 'N/A'}
-                Representante: ${(_h = (_g = doc.representative) === null || _g === void 0 ? void 0 : _g.name) !== null && _h !== void 0 ? _h : 'N/A'}
-            `;
-                const embedding = yield getEmbedding(textToEmbed);
-                return Object.assign(Object.assign({}, doc), { embedding: embedding, month: month });
-            })));
-            const validDocuments = insertDocuments.filter(d => d.embedding);
-            if (validDocuments.length === 0) {
-                throw new Error("Nenhum documento foi 'embedado' com sucesso.");
-            }
-            yield config_1.vectorCollection.deleteMany({ month: month });
-            const result = yield config_1.vectorCollection.insertMany(validDocuments, { ordered: false });
-            console.log(`Documentos JSON inseridos para ${month}: ${result.insertedCount}`);
-            return result.insertedCount;
+                return new documents_1.Document({
+                    pageContent: `
+                    Empresa: ${(_b = (_a = doc.company) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : 'N/A'}
+                    Plano: ${(_d = (_c = doc.plan) === null || _c === void 0 ? void 0 : _c.name) !== null && _d !== void 0 ? _d : 'N/A'}
+                    Organização: ${(_f = (_e = doc.organization) === null || _e === void 0 ? void 0 : _e.name) !== null && _f !== void 0 ? _f : 'N/A'}
+                    Representante: ${(_h = (_g = doc.representative) === null || _g === void 0 ? void 0 : _g.name) !== null && _h !== void 0 ? _h : 'N/A'}
+                `,
+                    metadata: Object.assign(Object.assign({}, doc), { month: month })
+                });
+            });
+            // aplica embeddings nos langChain Documents armazena na collection usando QdrantVectorStore
+            yield qdrant_1.QdrantVectorStore.fromDocuments(langchainDocs, config_1.openAiEmbbeding, {
+                client: config_1.qdrantClient,
+                collectionName: config_1.QDRANT_COLLECTION_NAME,
+            });
+            console.log(`[Qdrant Ingest] ✅ Documentos inseridos para ${month}: ${langchainDocs.length}`);
+            return langchainDocs.length;
         }
         catch (error) {
-            console.error("Erro de ingestão:", error);
+            console.error("[Qdrant Ingest] ❌ Erro de ingestão:", error);
             throw error;
         }
     });
-}
-function createVectorIndex() {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a, e_1, _b, _c;
-        try {
-            const existingIndex = yield config_1.vectorCollection.listSearchIndexes().toArray();
-            if (existingIndex.some(index => index.name === "vector_index")) {
-                console.log("Vector index already exists. Skipping creation.");
-                return;
-            }
-            const index = {
-                name: "vector_index",
-                type: "vectorSearch",
-                definition: {
-                    "fields": [
-                        { "type": "vector", "path": "embedding", "numDimensions": EMBEDDING_DIMENSIONS, "similarity": "cosine" },
-                        // ADICIONA OS CAMPOS DE FILTRO
-                        { "type": "filter", "path": "month" },
-                        { "type": "filter", "path": "representative.name" },
-                        { "type": "filter", "path": "organization.name" },
-                        { "type": "filter", "path": "company.type" },
-                        { "type": "filter", "path": "company.name" }
-                    ]
-                }
-            };
-            const result = yield config_1.vectorCollection.createSearchIndex(index);
-            console.log(`Novo index criado => ${result} `);
-            console.log("Verificando se o indice está pronto...");
-            let isQueryable = false;
-            while (!isQueryable) {
-                const cursor = config_1.vectorCollection.listSearchIndexes();
-                try {
-                    for (var _d = true, cursor_1 = (e_1 = void 0, __asyncValues(cursor)), cursor_1_1; cursor_1_1 = yield cursor_1.next(), _a = cursor_1_1.done, !_a; _d = true) {
-                        _c = cursor_1_1.value;
-                        _d = false;
-                        const index = _c;
-                        const i = index;
-                        if (i.name === result) {
-                            if (i.queryable) {
-                                console.log(`${result} está pronto para consulta.`);
-                                isQueryable = true;
-                            }
-                            else {
-                                yield new Promise(resolve => setTimeout(resolve, 5000));
-                            }
-                        }
-                    }
-                }
-                catch (e_1_1) { e_1 = { error: e_1_1 }; }
-                finally {
-                    try {
-                        if (!_d && !_a && (_b = cursor_1.return)) yield _b.call(cursor_1);
-                    }
-                    finally { if (e_1) throw e_1.error; }
-                }
-            }
-        }
-        catch (error) {
-            console.error("Erro ao criar vector Index:", error);
-            throw error;
-        }
-    });
-}
+}, { name: "Ingestão de dados - Qdrant", run_type: "tool" });
 function checkIfDataExists(month) {
     return __awaiter(this, void 0, void 0, function* () {
-        console.log(`Verificando se dados para o mês ${month} já existem...`);
+        console.log(`[Qdrant Check] Verificando se dados para o mês ${month} já existem...`);
         try {
-            const doc = yield config_1.vectorCollection.findOne({ month: month });
-            if (doc) {
-                console.log(`Dados para ${month} encontrados.`);
-                return true;
-            }
-            console.log(`Dados para ${month} não encontrados.`);
-            return false;
+            const result = yield config_1.qdrantClient.scroll(config_1.QDRANT_COLLECTION_NAME, {
+                filter: {
+                    must: [
+                        { key: "month", match: { value: month } }
+                    ]
+                },
+                limit: 1,
+            });
+            const exists = result.points.length > 0;
+            console.log(`[Qdrant Check] Dados para ${month} ${exists ? 'encontrados.' : 'não encontrados.'}`);
+            return exists;
         }
         catch (error) {
-            console.error("Erro ao verificar dados:", error);
+            if (error.message && error.message.includes("Not found")) {
+                console.log("[Qdrant Check] Coleção não encontrada, portanto, dados não existem.");
+                return false;
+            }
+            console.error("[Qdrant Check] ❌ Erro ao verificar dados:", error);
             return false;
         }
     });

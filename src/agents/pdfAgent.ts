@@ -1,11 +1,10 @@
 import { retrieverSessionHistory } from "../memory";
-import { ensureMongoConnection, OPENAI_MODEL, openAIClient } from "../config";
+import { OPENAI_MODEL, openAIClient } from "../config";
 import { generatePdfFromHtml } from "../utils/pdfGenerator";
 
 export async function runPdfAgent(sessionId: string, userInput: string) {
     
     try {
-        await ensureMongoConnection();
         console.log("[PDF Agent] MongoDB pronto para uso.");
         
         const sessionHistory = await retrieverSessionHistory(sessionId);
@@ -20,7 +19,7 @@ export async function runPdfAgent(sessionId: string, userInput: string) {
         }
         
         console.log("[PDF Agent] Relatório encontrado, gerando HTML...");
-        const htmlContent = await generateHtmlFromReport(lastReport.content, sessionHistory);
+        const htmlContent = await generateHtmlFromReport(lastReport.content);
         
         console.log("[PDF Agent] HTML gerado, convertendo para PDF...");
         const pdfBuffer = await generatePdfFromHtml(htmlContent);
@@ -28,7 +27,7 @@ export async function runPdfAgent(sessionId: string, userInput: string) {
         return {
             success: true,
             base64: pdfBuffer.toString('base64'),
-            filename: `relatorio_${sessionId}_${Date.now()}.pdf`,
+            filename: `relatorio-credify`,
             mimeType: "application/pdf"
         };
         
@@ -114,7 +113,7 @@ function findLastReport(history: any[]): { role: string, content: string } | nul
 }
 
 
-async function generateHtmlFromReport(reportMarkdown: string, history: any[]) {
+async function generateHtmlFromReport(reportMarkdown: string) {
 
     const systemPrompt = `
     Você é um designer de documentos especializado em converter relatórios Markdown em HTML profissional.

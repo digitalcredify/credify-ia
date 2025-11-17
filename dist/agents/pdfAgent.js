@@ -16,7 +16,6 @@ const pdfGenerator_1 = require("../utils/pdfGenerator");
 function runPdfAgent(sessionId, userInput) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            yield (0, config_1.ensureMongoConnection)();
             console.log("[PDF Agent] MongoDB pronto para uso.");
             const sessionHistory = yield (0, memory_1.retrieverSessionHistory)(sessionId);
             const lastReport = findLastReport(sessionHistory);
@@ -26,12 +25,14 @@ function runPdfAgent(sessionId, userInput) {
                     message: "Não encontrei nenhum relatório anterior."
                 };
             }
-            const htmlContent = yield generateHtmlFromReport(lastReport.content, sessionHistory);
+            console.log("[PDF Agent] Relatório encontrado, gerando HTML...");
+            const htmlContent = yield generateHtmlFromReport(lastReport.content);
+            console.log("[PDF Agent] HTML gerado, convertendo para PDF...");
             const pdfBuffer = yield (0, pdfGenerator_1.generatePdfFromHtml)(htmlContent);
             return {
                 success: true,
                 base64: pdfBuffer.toString('base64'),
-                filename: `relatorio_${sessionId}_${Date.now()}.pdf`,
+                filename: `relatorio-credify`,
                 mimeType: "application/pdf"
             };
         }
@@ -105,21 +106,20 @@ function findLastReport(history) {
     console.log(`[PDF Agent] Nenhum relatório encontrado no histórico`);
     return null;
 }
-function generateHtmlFromReport(reportMarkdown, history) {
+function generateHtmlFromReport(reportMarkdown) {
     return __awaiter(this, void 0, void 0, function* () {
         const systemPrompt = `
     Você é um designer de documentos especializado em converter relatórios Markdown em HTML profissional.
     
     **TAREFA:**
     Converta o relatório Markdown abaixo em HTML completo, aplicando a identidade visual da Credify.
-    
+                
     **IDENTIDADE VISUAL DA CREDIFY:**
     - Cor Primária: #a91016 (Vermelho escuro)
     - Cor Secundária: #e51127 (Vermelho vibrante)
     - Cor de Destaque: #e51127 (Vermelho vibrante)
     - Cor de Fundo: #F9FAFB (Cinza claro)
-    - Fonte: 'Inter', sans-serif
-    - Logo: https://lirp.cdn-website.com/d6f6e322/dms3rep/multi/opt/Logo-Credify-Transparent---Copia--282-29-640w.png
+    - Fonte: Arial, Helvetica, sans-serif (fontes do sistema)
     
     **ESTRUTURA OBRIGATÓRIA:**
     
@@ -128,12 +128,10 @@ function generateHtmlFromReport(reportMarkdown, history) {
     <head>
         <meta charset="UTF-8">
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-            
             * { margin: 0; padding: 0; box-sizing: border-box; }
             
             body {
-                font-family: 'Inter', sans-serif;
+                font-family: Arial, Helvetica, sans-serif;
                 background: #F9FAFB;
                 padding: 40px;
                 color: #1F2937;
@@ -148,17 +146,18 @@ function generateHtmlFromReport(reportMarkdown, history) {
                 text-align: center;
             }
             
-            .logo-img {
-                max-width: 180px;
-                height: auto;
-                margin-bottom: 20px;
-                filter: brightness(0) invert(1);
+            .logo-text {
+                font-size: 36px;
+                font-weight: 700;
+                letter-spacing: 2px;
+                margin-bottom: 15px;
             }
             
             .report-title {
-                font-size: 32px;
-                font-weight: 700;
+                font-size: 24px;
+                font-weight: 600;
                 margin-bottom: 10px;
+                opacity: 0.95;
             }
             
             .report-date {
@@ -235,50 +234,6 @@ function generateHtmlFromReport(reportMarkdown, history) {
                 background: #fee;
             }
             
-            .metric-card {
-                background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%);
-                padding: 20px;
-                border-radius: 8px;
-                margin: 15px 0;
-                border-left: 4px solid #e51127;
-            }
-            
-            .metric-value {
-                font-size: 28px;
-                font-weight: 700;
-                color: #a91016;
-            }
-            
-            .metric-label {
-                font-size: 14px;
-                color: #6B7280;
-                margin-top: 5px;
-            }
-            
-            .footer {
-                margin-top: 40px;
-                padding-top: 20px;
-                border-top: 2px solid #E5E7EB;
-                text-align: center;
-                color: #6B7280;
-                font-size: 12px;
-            }
-            
-            .footer-logo {
-                max-width: 120px;
-                height: auto;
-                margin-top: 15px;
-                opacity: 0.6;
-            }
-            
-            .highlight {
-                background: #FEF3C7;
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-weight: 600;
-                color: #a91016;
-            }
-            
             ul, ol {
                 margin-left: 25px;
                 margin-bottom: 15px;
@@ -298,15 +253,28 @@ function generateHtmlFromReport(reportMarkdown, history) {
                 border-top: 2px solid #E5E7EB;
                 margin: 30px 0;
             }
+            
+            .footer {
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 2px solid #E5E7EB;
+                text-align: center;
+                color: #6B7280;
+                font-size: 12px;
+            }
+            
+            .footer-logo {
+                font-size: 16px;
+                font-weight: 700;
+                color: #a91016;
+                margin-top: 10px;
+                letter-spacing: 1px;
+            }
         </style>
     </head>
     <body>
         <div class="header">
-            <img 
-                src="https://lirp.cdn-website.com/d6f6e322/dms3rep/multi/opt/Logo-Credify-Transparent---Copia--282-29-640w.png" 
-                alt="Logo Credify" 
-                class="logo-img"
-            />
+            <div class="logo-text">CREDIFY</div>
             <div class="report-title">Relatório Financeiro</div>
             <div class="report-date">Gerado em ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
         </div>
@@ -320,11 +288,7 @@ function generateHtmlFromReport(reportMarkdown, history) {
             <p><strong>Credify</strong> | Análise Financeira Inteligente</p>
             <p>Documento gerado automaticamente pelo sistema de IA</p>
             <p>${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })} • ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-            <img 
-                src="https://lirp.cdn-website.com/d6f6e322/dms3rep/multi/opt/Logo-Credify-Transparent---Copia--282-29-640w.png" 
-                alt="Logo Credify" 
-                class="footer-logo"
-            />
+            <div class="footer-logo">CREDIFY</div>
         </div>
     </body>
     </html>
@@ -334,13 +298,15 @@ function generateHtmlFromReport(reportMarkdown, history) {
     2. Converta tabelas Markdown para <table> HTML com <thead> e <tbody>
     3. Valores monetários (R$ X.XXX,XX) devem usar <strong> para destaque em vermelho
     4. Percentuais importantes devem usar <strong>
-    5. Métricas destacadas podem usar .metric-card se apropriado
+    5. Métricas destacadas podem usar destaque visual apropriado
     6. Mantenha a formatação e estrutura do relatório original
     7. Converta listas Markdown (-, *) para <ul><li>
     8. Converta **negrito** para <strong>
     9. Converta separadores (---) para <hr>
     10. NÃO adicione informações que não estão no relatório original
     11. Retorne APENAS o HTML completo, sem explicações ou código markdown
+    12. NÃO use @import, Google Fonts ou imagens externas
+    13. Use APENAS fontes do sistema (Arial, Helvetica, sans-serif)
     
     **EXEMPLO DE CONVERSÃO:**
     
@@ -385,7 +351,6 @@ function generateHtmlFromReport(reportMarkdown, history) {
                 { role: "system", content: systemPrompt },
                 { role: "user", content: "Gere o HTML completo do relatório seguindo exatamente a estrutura fornecida." }
             ],
-            // temperature: 0.3, // Baixa temperatura para consistência
         });
         return response.choices[0].message.content || "";
     });

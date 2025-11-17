@@ -1,194 +1,236 @@
+/**
+ * @fileoverview 
+ * este arquivo é responsável pela capacidade de busca do sistema. Oq ele faz?
+ * 1- Transforma os dados provenientes de um JSON em embeddings (vetores semânticos)
+ * 2- Armazena esses embeddings no Qdrant Cloud.
+ * 3- Converte valores de centavos (com 4 casas decimais) para reais
+ */
 
-import { openAIClient, openAiEmbbeding, vectorCollection } from "../config";
+import { qdrantClient, openAiEmbbeding, QDRANT_COLLECTION_NAME } from "../config";
 import { traceable } from "langsmith/traceable";
+import { Document } from "@langchain/core/documents";
+import { QdrantVectorStore } from "@langchain/qdrant";
 
 
-const EMBEDDING_DIMENSIONS = 1536;
+function convertCentsToReais(valueInCents: number | undefined): number {
+    if (!valueInCents) return 0;
+    return valueInCents / 10000;
+}
 
-export const getEmbedding = traceable(
-    async function getEmbedding(data: string) {
-        const response = await openAIClient.embeddings.create({
-            input: data,
-            model: 'text-embedding-3-small',
+
+function processDocumentValues(doc: any): any {
+    const processed = { ...doc };
+    
+    
+    if (processed.totals) {
+        processed.totals = {
+            totalConsumptions: processed.totals.totalConsumptions || 0,
+            totalValueInReais: convertCentsToReais(processed.totals.totalValueInCents),
+            totalValueWithDiscountInReais: convertCentsToReais(processed.totals.totalValueWithDiscountInCents),
+            totalSourcesCostInReais: convertCentsToReais(processed.totals.totalSourcesCostInCents),
+            
+            totalValueInCents: processed.totals.totalValueInCents || 0,
+            totalValueWithDiscountInCents: processed.totals.totalValueWithDiscountInCents || 0,
+            totalSourcesCostInCents: processed.totals.totalSourcesCostInCents || 0
+        };
+    }
+    
+    
+    if (processed.plan && processed.plan.minimumBillingValueInCents) {
+        processed.plan.minimumBillingValueInReais = convertCentsToReais(processed.plan.minimumBillingValueInCents);
+    }
+    
+    
+    if (processed.users && Array.isArray(processed.users)) {
+        processed.users = processed.users.map((user: any) => {
+            if (user.totals) {
+                return {
+                    ...user,
+                    totals: {
+                        totalConsumptions: user.totals.totalConsumptions || 0,
+                        totalValueInReais: convertCentsToReais(user.totals.totalValueInCents),
+                        totalValueWithDiscountInReais: convertCentsToReais(user.totals.totalValueWithDiscountInCents),
+                        totalSourcesCostInReais: convertCentsToReais(user.totals.totalSourcesCostInCents),
+                        totalValueInCents: user.totals.totalValueInCents || 0,
+                        totalValueWithDiscountInCents: user.totals.totalValueWithDiscountInCents || 0,
+                        totalSourcesCostInCents: user.totals.totalSourcesCostInCents || 0
+                    }
+                };
+            }
+            return user;
         });
-        return response.data[0].embedding;
-    },
-    { name: "Get Embedding", run_type: "llm" }
-);
+    }
+    
+    return processed;
+}
+
+
+async function ensureCollectionExists() {
+    try {
+        const collectionInfo = await qdrantClient.getCollection(QDRANT_COLLECTION_NAME);
+        console.log(`[Qdrant] Coleção '${QDRANT_COLLECTION_NAME}' já existe.`);
+        return;
+    } catch (error: any) {
+        if (error.status === 404 || (error.message && error.message.includes("Not found"))) {
+            console.log(`[Qdrant] Coleção não encontrada. Criando '${QDRANT_COLLECTION_NAME}'...`);
+            
+            try {
+                await qdrantClient.createCollection(QDRANT_COLLECTION_NAME, {
+                    vectors: {
+                        size: 3072,
+                        distance: "Cosine"
+                    }
+                });
+                console.log(`[Qdrant] ✅ Coleção criada!`);
+                
+                await qdrantClient.createPayloadIndex(QDRANT_COLLECTION_NAME, {
+                    field_name: "metadata.month",
+                    field_schema: "keyword"
+                });
+                console.log(`[Qdrant] ✅ Índice criado para metadata.month!`);
+                
+            } catch (createError: any) {
+                if (createError.message && createError.message.includes("already exists")) {
+                    console.log(`[Qdrant] Coleção já foi criada por outra requisição.`);
+                    return;
+                }
+                throw createError;
+            }
+        } else {
+            throw error;
+        }
+    }
+}
+
+
+async function deleteExistingDataForMonth(month: string) {
+    console.log(`[Qdrant Ingest] 🗑️ Verificando dados existentes para o mês: ${month}`);
+
+    try {
+        const existingPoints = await qdrantClient.scroll(QDRANT_COLLECTION_NAME, {
+            filter: {
+                must: [
+                    { key: "metadata.month", match: { value: month } }
+                ]
+            },
+            limit: 10000,
+        });
+
+        if (existingPoints.points.length > 0) {
+            const idsToDelete = existingPoints.points.map(point => point.id);
+            console.log(`[Qdrant Ingest] Deletando ${idsToDelete.length} pontos existentes...`);
+
+            await qdrantClient.delete(QDRANT_COLLECTION_NAME, {
+                points: idsToDelete
+            });
+
+            console.log(`[Qdrant Ingest] ✅ ${idsToDelete.length} pontos deletados.`);
+        } else {
+            console.log(`[Qdrant Ingest] Nenhum ponto encontrado para deletar.`);
+        }
+
+    } catch (error: any) {
+        console.error("[Qdrant Ingest] ❌ Erro ao deletar dados antigos:", error);
+        throw error;
+    }
+}
 
 
 export const ingestData = traceable(
     async function ingestData(jsonData: any, month: string) {
-        console.log('Iniciando ingestão de dados...');
+        console.log(`[Qdrant Ingest] 🚀 Iniciando ingestão de dados para o mês: ${month}`);
 
         try {
             const documents = jsonData.data;
             if (!Array.isArray(documents)) {
                 throw new Error("O JSON recebido não contém um array 'data'.");
             }
+            console.log(`[Qdrant Ingest] Documentos JSON encontrados: ${documents.length}`);
 
-            console.log(`Documentos JSON encontrados: ${documents.length}`);
+            await ensureCollectionExists();
+            await deleteExistingDataForMonth(month);
 
-            const insertDocuments = await Promise.all(documents.map(async (doc: any) => {
-                const textToEmbed = `
-                Empresa: ${doc.company?.name ?? 'N/A'}
-                Plano: ${doc.plan?.name ?? 'N/A'}
-                Organização: ${doc.organization?.name ?? 'N/A'}
-                Representante: ${doc.representative?.name ?? 'N/A'}
-            `;
+            const langchainDocs = documents.map(doc => {
+                
+                const processedDoc = processDocumentValues(doc);
+                
+                
+                const totalValue = processedDoc.totals?.totalValueInReais || 0;
+                const totalValueWithDiscount = processedDoc.totals?.totalValueWithDiscountInReais || 0;
+                const totalSourcesCost = processedDoc.totals?.totalSourcesCostInReais || 0;
+                const lucro = totalValueWithDiscount - totalSourcesCost;
+                
+                return new Document({
+                    pageContent: `
+Empresa: ${processedDoc.company?.name ?? 'N/A'}
+Tipo de Empresa: ${processedDoc.company?.type ?? 'N/A'}
+CNPJ: ${processedDoc.company?.document ?? 'N/A'}
 
-                const embedding = await getEmbedding(textToEmbed)
+Plano: ${processedDoc.plan?.name ?? 'N/A'}
+Organização: ${processedDoc.organization?.name ?? 'N/A'}
+Representante: ${processedDoc.representative?.name ?? 'N/A'}
+Revenue: ${processedDoc.revenue?.name ?? 'N/A'}
 
-                return {
-                    ...doc,
-                    embedding: embedding,
-                    month: month
+Dados Financeiros (valores em Reais):
+        - Total de Consumos: ${processedDoc.totals?.totalConsumptions ?? 0}
+        - Valor Total: R$ ${totalValue.toFixed(4)}
+        - Valor com Desconto: R$ ${totalValueWithDiscount.toFixed(4)}
+        - Custo de Fontes: R$ ${totalSourcesCost.toFixed(4)}
+        - Lucro: R$ ${lucro.toFixed(4)}
+
+Período: ${month}
+                    `.trim(),
+                    metadata: {
+                        ...processedDoc,
+                        month: month
+                    }
+                });
+            });
+
+            console.log(`[Qdrant Ingest] Gerando embeddings e inserindo ${langchainDocs.length} documentos...`);
+
+            await QdrantVectorStore.fromDocuments(
+                langchainDocs,
+                openAiEmbbeding,
+                {
+                    client: qdrantClient,
+                    collectionName: QDRANT_COLLECTION_NAME,
                 }
+            );
 
-            }))
-
-            const validDocuments = insertDocuments.filter(d => d.embedding);
-            if (validDocuments.length === 0) {
-                throw new Error("Nenhum documento foi 'embedado' com sucesso.");
-            }
-
-            await vectorCollection.deleteMany({ month: month });
-            const result = await vectorCollection.insertMany(validDocuments, { ordered: false });
-
-            console.log(`Documentos JSON inseridos para ${month}: ${result.insertedCount}`);
-            
-            console.log(`⏳ Aguardando índice vetorial ser atualizado...`);
-            await waitForIndexUpdate(result.insertedCount, month);
-            
-            return result.insertedCount;
+            console.log(`[Qdrant Ingest] ✅ Ingestão concluída! ${langchainDocs.length} documentos inseridos.`);
+            console.log(`[Qdrant Ingest] 💰 Valores convertidos de centavos para reais (÷ 10.000)`);
+            return langchainDocs.length;
 
         } catch (error) {
-            console.error("Erro de ingestão:", error);
+            console.error("[Qdrant Ingest] ❌ Erro de ingestão:", error);
             throw error;
         }
     },
-    { name: "Ingest Data", run_type: "tool" }
-
+    { name: "Ingestão de dados - Qdrant", run_type: "tool" }
 )
 
-async function waitForIndexUpdate(expectedCount: number, month: string, maxWaitTime: number = 30000) {
-    console.log(`📊 Esperando ${expectedCount} documentos do mês ${month} ficarem disponíveis para busca vetorial`);
-    
-    const startTime = Date.now();
-    const pollInterval = 1000; 
-    
-    while (Date.now() - startTime < maxWaitTime) {
-        try {
-            const testEmbedding = await getEmbedding("test");
-            
-            const pipeline = [
-                {
-                    $vectorSearch: {
-                        index: "vector_index",
-                        queryVector: testEmbedding,
-                        path: "embedding",
-                        numCandidates: expectedCount + 100,
-                        limit: expectedCount,
-                        filter: { month: month } 
-                    }
-                },
-                {
-                    $count: "total"
-                }
-            ];
-            
-            const result = await vectorCollection.aggregate(pipeline).toArray();
-            const indexedCount = result[0]?.total || 0;
-            
-            console.log(`📊 Documentos indexados: ${indexedCount}/${expectedCount}`);
-            
-            if (indexedCount >= expectedCount * 0.9) {
-                console.log(`✅ Índice vetorial atualizado! (${indexedCount} documentos disponíveis)`);
-                return true;
-            }
-            
-            await new Promise(resolve => setTimeout(resolve, pollInterval));
-            
-        } catch (error) {
-            console.warn(`⚠️ Erro ao verificar índice:`, error);
-            await new Promise(resolve => setTimeout(resolve, pollInterval));
-        }
-    }
-    
-    console.warn(`⚠️ Timeout ao aguardar atualização do índice (${maxWaitTime}ms)`);
-    console.warn(`⚠️ Continuando mesmo assim... Pode haver resultados inconsistentes.`);
-    return false;
-}
+export async function checkIfDataExists(month: string): Promise<boolean> {
+    console.log(`[Qdrant Check] Verificando se dados para o mês ${month} já existem...`);
 
-
-export async function createVectorIndex() {
     try {
-        const existingIndex = await vectorCollection.listSearchIndexes().toArray();
-        if (existingIndex.some(index => index.name === "vector_index")) {
-            console.log("Vector index already exists. Skipping creation.");
-            return;
-        }
+        await ensureCollectionExists();
 
-        const index = {
-            name: "vector_index",
-            type: "vectorSearch",
-            definition: {
-                "fields": [
-                    { "type": "vector", "path": "embedding", "numDimensions": EMBEDDING_DIMENSIONS, "similarity": "cosine" },
-                    // ADICIONA OS CAMPOS DE FILTRO
-                    { "type": "filter", "path": "month" },
-                    { "type": "filter", "path": "representative.name" },
-                    { "type": "filter", "path": "organization.name" },
-                    { "type": "filter", "path": "company.type" },
-                    { "type": "filter", "path": "company.name" }
+        const result = await qdrantClient.scroll(QDRANT_COLLECTION_NAME, {
+            filter: {
+                must: [
+                    { key: "metadata.month", match: { value: month } }
                 ]
-            }
-        };
+            },
+            limit: 1,
+        });
 
-        const result = await vectorCollection.createSearchIndex(index);
-        console.log(`Novo index criado => ${result} `);
+        const exists = result.points.length > 0;
+        console.log(`[Qdrant Check] Dados para ${month}: ${exists ? '✅ encontrados' : '❌ não encontrados'}`);
+        return exists;
 
-        console.log("Verificando se o indice está pronto...");
-        let isQueryable = false;
-        while (!isQueryable) {
-            const cursor = vectorCollection.listSearchIndexes();
-            for await (const index of cursor) {
-                const i = index as any;
-                if (i.name === result) {
-                    if (i.queryable) {
-                        console.log(`${result} está pronto para consulta.`);
-                        isQueryable = true;
-                    } else {
-                        await new Promise(resolve => setTimeout(resolve, 5000));
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error("Erro ao criar vector Index:", error);
-        throw error;
-    }
-}
-
-export async function checkIfDataExists(month: string) {
-
-    console.log(`Verificando se dados para o mês ${month} já existem...`);
-
-    try {
-        const doc = await vectorCollection.findOne({ month: month });
-
-        if (doc) {
-            console.log(`Dados para ${month} encontrados.`);
-            return true;
-
-        }
-        console.log(`Dados para ${month} não encontrados.`);
-        return false;
-
-    } catch (error) {
-        console.error("Erro ao verificar dados:", error);
+    } catch (error: any) {
+        console.error("[Qdrant Check] ❌ Erro ao verificar dados:", error);
         return false;
     }
-
-
 }

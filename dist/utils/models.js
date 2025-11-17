@@ -18,5 +18,5 @@ exports.middleModel = new openai_1.ChatOpenAI({
 });
 exports.advancedModel = new openai_1.ChatOpenAI({
     model: "gpt-5",
-    apiKey: apiKey
+    apiKey: apiKey,
 });

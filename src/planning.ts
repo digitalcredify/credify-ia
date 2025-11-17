@@ -1,3 +1,10 @@
+/**
+ * @fileoverview 
+ * este arquivo é o mais complexo do sistema, possui varias funcionalidades.
+ * 1 - Seleção e execução de ferramentas
+ * 2- geração de r4esposta final.
+ */
+
 import { traceable } from "langsmith/traceable";
 import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
 import { advancedModel, balancedModel, fastModel } from "./config";
@@ -5,14 +12,20 @@ import { storeChatMessage, retrieverSessionHistory } from "./memory";
 import { specificQueryTool, aggregateTool, hybridSearchTool, calculatorTool } from "./tools";
 
 
-
-export const OpenAiChatCompleiton = traceable(
+// essa função gera a resposta da pergunta
+export const generateResponseOpenAI = traceable(
     async function OpenAiChatCompleiton(
-        messages: any,
-        modelType: "advanced" | "balanced" | "fast" = "advanced",
-        onChunk?: (chunk: string) => void  
+        messages: any, // historico de mensagem
+        modelType: "advanced" | "balanced" | "fast" = "advanced", // modelos pre definidos (com a intenção de diminuir a latência)
+        onChunk?: (chunk: string) => void  // streaming
     ): Promise<string> {
         try {
+
+            /**
+             * Indentifica o papel da mensagem
+             * Converte as mensagens em formato langchain
+             * Qualquer coisa fora do padrão é mensagen di tipo HumanMessage, para garantir que nada quebre
+             */
             const langchainMessages = messages.map((msg: any) => {
                 if (msg.role === "system") return new SystemMessage(msg.content);
                 if (msg.role === "user") return new HumanMessage(msg.content);
@@ -20,6 +33,7 @@ export const OpenAiChatCompleiton = traceable(
                 return new HumanMessage(msg.content); 
             });
 
+            // define o modelo
             let selectedModel;
             if (modelType === "advanced") {
                 selectedModel = advancedModel;
@@ -29,6 +43,7 @@ export const OpenAiChatCompleiton = traceable(
                 selectedModel = fastModel;
             }
 
+            // caso seja o streaming esteja ativado, vai fazer o streaming
             if (onChunk) {
                 const stream = await selectedModel.stream(langchainMessages);
                 let fullResponse = "";
@@ -46,6 +61,7 @@ export const OpenAiChatCompleiton = traceable(
                 return fullResponse;
             } 
             else {
+                // invoka a resposta do llm
                 const response = await selectedModel.invoke(langchainMessages);
                 return String(response.content);
             }
@@ -56,7 +72,7 @@ export const OpenAiChatCompleiton = traceable(
         }
     },
     {
-        name: "OpenAI Chat Completion",
+        name: "Generate Responde OpenAI",
         run_type: "llm",
         metadata: {
             provider: "OpenAI"
@@ -64,133 +80,137 @@ export const OpenAiChatCompleiton = traceable(
     }
 ) as (messages: any, modelType?: "advanced" | "balanced" | "fast", onChunk?: (chunk: string) => void) => Promise<string>;
 
-export const toolSelector = traceable(
+
+// essa função é um agente que pega o input do usuário e com base nele determina qual a tool mais adequada.
+export const runToolSelectorAgent = traceable(
     async function toolSelector(
-        userInput: any, 
-        sessionHistory: any[] = []
+        userInput: any,  // input do usuario
+        sessionHistory: any[] = [] // historico da conversa
     ): Promise<{ tool: string; input: any }> {
 
-            const systemPrompt = `
+        // prompt de instrução do sistema.
+        const systemPrompt = `
             Você é um roteador de tarefas inteligente. Analise a INTENÇÃO da pergunta, não apenas as palavras exatas.
 
-    ### Ferramentas Disponíveis
+            ### Ferramentas Disponíveis
 
-    1. **specific_query_tool**: Busca informações específicas sobre UMA entidade.
-       
-       **Quando usar:**
-       - Pergunta menciona nome específico de empresa, representante, organização, etc.
-       - Usuário quer saber sobre UM item específico
-       - Funciona para QUALQUER propriedade: documento, plano, tipo, revenue, etc.
-       
-       **Exemplos (não limitado a estes):**
-       - "Qual o documento da iFood?"
-       - "Me fale o plano da SEM PARAR"
-       - "Qual o tipo da CREDIFY?"
-       - "Qual a organização do SEGUNDO CARTÓRIO?"
-       - "Qual o revenue da iFood?"
-       
-       **Variações aceitas:**
-       - "iFood tem qual documento?" → ✅ Mesma intenção
-       - "Me mostre o plano da SEM PARAR" → ✅ Mesma intenção
-       
-       **Retorno:**
-       {"tool": "specific_query_tool", "input": {"query": "...", "filters": {}}}
+                1. **specific_query_tool**: Busca informações específicas sobre UMA entidade.
+        
+                    **Quando usar:**
+                    - Pergunta menciona nome específico de empresa, representante, organização, etc.
+                    - Usuário quer saber sobre UM item específico
+                    - Funciona para QUALQUER propriedade: documento, plano, tipo, revenue, etc.
+        
+                    **Exemplos (não limitado a estes):**
+                        - "Qual o documento da iFood?"
+                        - "Me fale o plano da SEM PARAR"
+                        - "Qual o tipo da CREDIFY?"
+                        - "Qual a organização do SEGUNDO CARTÓRIO?"
+                        - "Qual o revenue da iFood?"
+        
+                    **Variações aceitas:**
+                        - "iFood tem qual documento?" → ✅ Mesma intenção
+                        - "Me mostre o plano da SEM PARAR" → ✅ Mesma intenção
+        
+                    **Retorno:**
+                    {"tool": "specific_query_tool", "input": {"query": "...", "filters": {}}}
 
-    2. **aggregate_tool**: Agrega dados por QUALQUER campo.
-       
-       **Quando usar:**
-       - Pergunta pede comparação, ranking ou total de MÚLTIPLOS itens
-       - Usuário quer ver dados agrupados
-       - Funciona para: representative, company, organization, revenue, plan, company_type, etc.
-       
-       **Exemplos (não limitado a estes):**
-       - "Desempenho por representante" → groupBy: "representative"
-       - "Desempenho por empresa" → groupBy: "company"
-       - "Agregue por organização" → groupBy: "organization"
-       - "Total por revenue" → groupBy: "revenue"
-       - "Agrupe por plano" → groupBy: "plan"
-       - "Empresas por tipo" → groupBy: "company_type"
-       
-       **Variações aceitas:**
-       - "Mostre cada representante" → ✅ groupBy: "representative"
-       - "Ranking de vendedores" → ✅ groupBy: "representative"
-       - "Compare as empresas" → ✅ groupBy: "company"
-       
-       **Retorno:**
-       {"tool": "aggregate_tool", "input": {"query": "...", "filters": {}, "groupBy": "representative"}}
-       
-       **⚠️ IMPORTANTE:** Você DEVE especificar o campo "groupBy" no input!
+                2. **aggregate_tool**: Agrega dados por QUALQUER campo.
+        
+                    **Quando usar:**
+                        - Pergunta pede comparação, ranking ou total de MÚLTIPLOS itens
+                        - Usuário quer ver dados agrupados
+                        - Funciona para: representative, company, organization, revenue, plan, company_type, etc.
+        
+                    **Exemplos (não limitado a estes):**
+                        - "Desempenho por representante" → groupBy: "representative"
+                        - "Desempenho por empresa" → groupBy: "company"
+                        - "Agregue por organização" → groupBy: "organization"
+                        - "Total por revenue" → groupBy: "revenue"
+                        - "Agrupe por plano" → groupBy: "plan"
+                        - "Empresas por tipo" → groupBy: "company_type"
 
-    3. **hybrid_search_tool**: Busca híbrida (fallback).
-       
-       **Quando usar:**
-       - Pergunta é ambígua, complexa ou não se encaixa claramente nas outras tools
-       - Você não tem certeza qual tool usar
-       
-       **Exemplos:**
-       - "Me explique como funciona..."
-       - "Análise detalhada de..."
-       - "Me fale sobre esses dados"
-       
-       **Retorno:**
-       {"tool": "hybrid_search_tool", "input": {"query": "...", "filters": {}}}
+                        **Variações aceitas:**
+                        - "Mostre cada representante" → ✅ groupBy: "representative"
+                        - "Ranking de vendedores" → ✅ groupBy: "representative"
+                        - "Compare as empresas" → ✅ groupBy: "company"
+        
+                    **Retorno:**
+                    {"tool": "aggregate_tool", "input": {"query": "...", "filters": {}, "groupBy": "representative"}}
+        
+                    **⚠️ IMPORTANTE:** Você DEVE especificar o campo "groupBy" no input!
 
-    4. **none**: APENAS para cumprimentos e agradecimentos.
-       
-       **Quando usar:**
-       - "oi", "olá", "bom dia"
-       - "obrigado", "valeu", "até logo"
-       
-       **Retorno:**
-       {"tool": "none", "input": "..."}
+                3. **hybrid_search_tool**: Busca híbrida (fallback).
+        
+                    **Quando usar:**
+                    - Pergunta é ambígua, complexa ou não se encaixa claramente nas outras tools
+                    - Você não tem certeza qual tool usar
+        
+                    **Exemplos:**
+                    - "Me explique como funciona..."
+                    - "Análise detalhada de..."
+                    - "Me fale sobre esses dados"
+        
+                    **Retorno:**
+                    {"tool": "hybrid_search_tool", "input": {"query": "...", "filters": {}}}
 
-    ### ⚠️ REGRAS CRÍTICAS:
-    1. **Analise a INTENÇÃO**, não as palavras exatas
-    2. **Os exemplos são ilustrativos**, não limitantes
-    3. **Para agregação, SEMPRE especifique "groupBy"**
-    4. **SE VOCÊ NÃO TEM CERTEZA** qual tool usar, escolha **hybrid_search_tool**
-    5. **Formato JSON:** Retorne APENAS o JSON da ferramenta
+                4. **none**: APENAS para cumprimentos e agradecimentos.
+        
+                    **Quando usar:**
+                    - "oi", "olá", "bom dia"
+                    - "obrigado", "valeu", "até logo"
+        
+                    **Retorno:**
+                    {"tool": "none", "input": "..."}
 
-    ### Exemplos Completos
+            ### ⚠️ REGRAS CRÍTICAS:
+                1. **Analise a INTENÇÃO**, não as palavras exatas
+                2. **Os exemplos são ilustrativos**, não limitantes
+                3. **Para agregação, SEMPRE especifique "groupBy"**
+                4. **SE VOCÊ NÃO TEM CERTEZA** qual tool usar, escolha **hybrid_search_tool**
+                5. **Formato JSON:** Retorne APENAS o JSON da ferramenta
 
-    **Exemplo 1: Específica**
-    Histórico: []
-    Usuário: "Qual o documento da iFood?"
-    Retorno:
-    {"tool": "specific_query_tool", "input": {"query": "documento da iFood", "filters": {}}}
+            ### Exemplos Completos
 
-    **Exemplo 2: Agregação por Representante**
-    Histórico: []
-    Usuário: "desempenho por representante"
-    Retorno:
-    {"tool": "aggregate_tool", "input": {"query": "desempenho de todos os representantes", "filters": {}, "groupBy": "representative"}}
+            **Exemplo 1: Específica**
+                Histórico: []
+                Usuário: "Qual o documento da iFood?"
+                Retorno:
+                {"tool": "specific_query_tool", "input": {"query": "documento da iFood", "filters": {}}}
 
-    **Exemplo 3: Agregação por Plano**
-    Histórico: []
-    Usuário: "agrupe por plano"
-    Retorno:
-    {"tool": "aggregate_tool", "input": {"query": "dados agrupados por plano", "filters": {}, "groupBy": "plan"}}
+            **Exemplo 2: Agregação por Representante**
+                Histórico: []
+                Usuário: "desempenho por representante"
+                Retorno:
+                {"tool": "aggregate_tool", "input": {"query": "desempenho de todos os representantes", "filters": {}, "groupBy": "representative"}}
 
-    **Exemplo 4: Agregação por Tipo de Empresa**
-    Histórico: []
-    Usuário: "compare empresas master e unique"
-    Retorno:
-    {"tool": "aggregate_tool", "input": {"query": "comparação entre tipos de empresa", "filters": {}, "groupBy": "company_type"}}
+            **Exemplo 3: Agregação por Plano**
+                Histórico: []
+                Usuário: "agrupe por plano"
+                Retorno:
+                {"tool": "aggregate_tool", "input": {"query": "dados agrupados por plano", "filters": {}, "groupBy": "plan"}}
 
-    **Exemplo 5: Ambígua (Fallback)**
-    Histórico: []
-    Usuário: "me explique como funciona"
-    Retorno:
-    {"tool": "hybrid_search_tool", "input": {"query": "explicação sobre funcionamento", "filters": {}}}
+            **Exemplo 4: Agregação por Tipo de Empresa**
+                Histórico: []
+                Usuário: "compare empresas master e unique"
+                Retorno:
+                {"tool": "aggregate_tool", "input": {"query": "comparação entre tipos de empresa", "filters": {}, "groupBy": "company_type"}}
 
-    **Exemplo 6: Cumprimento**
-    Histórico: [ ... ]
-    Usuário: "muito obrigado"
-    Retorno:
-    {"tool": "none", "input": "muito obrigado"}
+            **Exemplo 5: Ambígua (Fallback)**
+                Histórico: []
+                Usuário: "me explique como funciona"
+                Retorno:
+                {"tool": "hybrid_search_tool", "input": {"query": "explicação sobre funcionamento", "filters": {}}}
+
+            **Exemplo 6: Cumprimento**
+                Histórico: [ ... ]
+                Usuário: "muito obrigado"
+                Retorno:
+                {"tool": "none", "input": "muito obrigado"}
 
     `.trim();
 
+        // monta o histórico completo da conversa que sera enviada ao sistema.
         const messages = [
             { role: "system", content: systemPrompt },
             ...sessionHistory,
@@ -198,19 +218,24 @@ export const toolSelector = traceable(
         ]
 
         try {
-            const response = await OpenAiChatCompleiton(messages, "balanced");
+            // envia as mensagens para o llm e retorna a resposta
+            const response = await generateResponseOpenAI(messages, "balanced");
             let toolCall;
 
+
             try {
+                // converte a resposta para json
                 toolCall = JSON.parse(response);
             } catch (parseError) {
                 console.warn("⚠️ Erro ao parsear JSON. Usando fallback...");
+                // caso haja alguma falha utiliza a ferramenta hybrid (generica)
                 return { 
                     tool: "hybrid_search_tool", 
                     input: { query: userInput, filters: {} } 
                 };
             }
 
+            // ferramentas validas
             const validTools = [
                 "specific_query_tool",
                 "aggregate_tool",
@@ -230,6 +255,7 @@ export const toolSelector = traceable(
                 toolCall.input = { query: userInput, filters: {} };
             }
 
+            
             if (toolCall.tool === "aggregate_tool" && !toolCall.input.groupBy) {
                 toolCall.input.groupBy = "company";
             }
@@ -272,7 +298,7 @@ const getLlmResponse = traceable(
         ];
 
         
-        const response = await OpenAiChatCompleiton(fullMessages, modelType, onChunk);
+        const response = await generateResponseOpenAI(fullMessages, modelType, onChunk);
         return response;
     },
     {
@@ -285,17 +311,29 @@ const getLlmResponse = traceable(
 ) as (messages: any, systemMessageContent: any, modelType?: "advanced" | "balanced" | "fast", onChunk?: (chunk: string) => void) => Promise<string>;
 
 
+/**
+ * Função principal que orquestra todo o processo. Ela é responsável por:
+ * 
+ * 
+ */
 export const generateResponse = traceable(
     async function generateResponse(
-        sessionId: any, 
-        userInput: any,
-        onChunk?: (chunk: string) => void  
+        sessionId: any, // sessão do chat do usuario
+        userInput: any, // pergunta do usuario
+        onChunk?: (chunk: string) => void  // streaming
     ): Promise<string> {
         
+        // armazena a pergunta do usuáiro no histórico de seção.
         await storeChatMessage(sessionId, "user", userInput);
+
+        // recupera todo o histórico da conversa, para entender o contexto
         const sessionHistory: any[] = await retrieverSessionHistory(sessionId);
+
+    
         const llmInput = [...sessionHistory];
-        const { tool, input: toolInput } = await toolSelector(userInput, sessionHistory);
+
+        // retorno da função que seleciona a ferramenta
+        const { tool, input: toolInput } = await runToolSelectorAgent(userInput, sessionHistory);
         console.log("🔧 Tool selecionada:", tool);
 
         let response;
@@ -319,14 +357,13 @@ export const generateResponse = traceable(
 Você é um analista financeiro experiente. Responda usando o contexto fornecido.
 
 **FORMATAÇÃO MONETÁRIA:**
+- Os valores JÁ ESTÃO EM REAIS (não precisa converter)
+- Campos como "totalValueInReais", "totalValueWithDiscountInReais" já estão prontos
 - Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
-- Exemplo correto: R$ 316.852,50
-- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- Exemplo: 11893.2337 → R$ 11.893,2337
+- Exemplo: 316852.5000 → R$ 316.852,5000
+- SEMPRE mostre exatamente 4 casas decimais após a vírgula
 - NUNCA use vírgula para separador de milhares
-
-**CONVERSÃO DE VALORES:**
-- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
-- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
 
 ### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
 
@@ -376,14 +413,13 @@ Você é um analista financeiro experiente. Os dados fornecidos JÁ ESTÃO AGREG
 NÃO precisa somar ou agrupar novamente! Apenas formate e analise.
 
 **FORMATAÇÃO MONETÁRIA:**
+- Os valores JÁ ESTÃO EM REAIS (não precisa converter)
+- Campos como "totalValueInReais", "totalValueWithDiscountInReais" já estão prontos
 - Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
-- Exemplo correto: R$ 316.852,50
-- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- Exemplo: 11893.2337 → R$ 11.893,2337
+- Exemplo: 316852.5000 → R$ 316.852,5000
+- SEMPRE mostre exatamente 4 casas decimais após a vírgula
 - NUNCA use vírgula para separador de milhares
-
-**CONVERSÃO DE VALORES:**
-- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
-- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
 
 ### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
 
@@ -431,14 +467,13 @@ ${context}`.trim();
 Você é um analista financeiro experiente. Faça uma análise abrangente e detalhada.
 
 **FORMATAÇÃO MONETÁRIA:**
+- Os valores JÁ ESTÃO EM REAIS (não precisa converter)
+- Campos como "totalValueInReais", "totalValueWithDiscountInReais" já estão prontos
 - Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
-- Exemplo correto: R$ 316.852,50
-- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- Exemplo: 11893.2337 → R$ 11.893,2337
+- Exemplo: 316852.5000 → R$ 316.852,5000
+- SEMPRE mostre exatamente 4 casas decimais após a vírgula
 - NUNCA use vírgula para separador de milhares
-
-**CONVERSÃO DE VALORES:**
-- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
-- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
 
 ### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
 

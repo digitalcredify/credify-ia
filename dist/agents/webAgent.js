@@ -10,20 +10,19 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runWebAgent = void 0;
-const config_1 = require("../config");
 const ingest_data_1 = require("../scripts/ingest-data");
 const planning_1 = require("../planning");
 const dateUtils_1 = require("../utils/dateUtils");
-const runWebAgent = (pergunta, jsonData, targetMonth) => __awaiter(void 0, void 0, void 0, function* () {
+const runWebAgent = (pergunta, jsonData, targetMonth, onChunk) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        yield (0, config_1.ensureMongoConnection)();
-        console.log("[Web Agent] MongoDB pronto para uso.");
+        // Não é mais necessário conectar ao MongoDB, o Qdrant é gerenciado automaticamente
+        console.log("[Web Agent] Iniciando processamento com Qdrant...");
         const isCurrentMonthFlag = (0, dateUtils_1.isCurrentMonth)(targetMonth);
         if (isCurrentMonthFlag) {
             console.log(`[Web Agent] ⚠️ Mês atual detectado (${targetMonth})`);
             console.log(`[Web Agent] 🔄 Reingerindo dados (dados dinâmicos)...`);
             yield (0, ingest_data_1.ingestData)(jsonData, targetMonth);
-            yield (0, ingest_data_1.createVectorIndex)();
+            // createVectorIndex não é mais necessário, o QdrantVectorStore cria a coleção automaticamente
             console.log(`[Web Agent] ✅ Reingestão concluída`);
         }
         else {
@@ -31,13 +30,14 @@ const runWebAgent = (pergunta, jsonData, targetMonth) => __awaiter(void 0, void 
             if (!dataExists) {
                 console.log(`[Web Agent] Iniciando ingestão para ${targetMonth}...`);
                 yield (0, ingest_data_1.ingestData)(jsonData, targetMonth);
-                yield (0, ingest_data_1.createVectorIndex)();
+                // createVectorIndex não é mais necessário
             }
             else {
                 console.log(`[Web Agent] Dados para ${targetMonth} já existem.`);
             }
         }
-        const response = yield (0, planning_1.generateResponse)(targetMonth, pergunta);
+        // Gera a resposta usando os dados do Qdrant
+        const response = yield (0, planning_1.generateResponse)(targetMonth, pergunta, onChunk);
         return response;
     }
     catch (error) {

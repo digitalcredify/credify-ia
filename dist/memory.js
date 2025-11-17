@@ -1,8 +1,9 @@
 "use strict";
 /**
-    * esse arquivo define o sistema que o agente utiliza para armazenas suas interações
-   
-*/
+ * @fileoverview
+ * este arquivo gerencia a conversa do chatBot.
+ * á completar
+ */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -13,41 +14,46 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.storeChatMessage = storeChatMessage;
-exports.retrieverSessionHistory = retrieverSessionHistory;
+exports.retrieverSessionHistory = exports.storeChatMessage = void 0;
 exports.clearAllChatHistory = clearAllChatHistory;
 exports.clearSessionHistory = clearSessionHistory;
-const config_1 = require("./config");
-function storeChatMessage(sessionId, role, content) {
+const traceable_1 = require("langsmith/traceable");
+// armazena histórico (agora em memoria)
+const chatHistories = {};
+// ???
+exports.storeChatMessage = (0, traceable_1.traceable)(function storeChatMessage(sessionId, role, content) {
     return __awaiter(this, void 0, void 0, function* () {
-        const message = {
-            session_id: sessionId,
-            role,
-            content,
+        if (!chatHistories[sessionId]) {
+            chatHistories[sessionId] = [];
+        }
+        chatHistories[sessionId].push({
+            role: role,
+            content: content,
             timestamp: new Date()
-        };
-        yield config_1.memoryCollection.insertOne(message);
-    });
-}
-function retrieverSessionHistory(sessionId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const cursor = config_1.memoryCollection
-            .find({ session_id: sessionId })
-            .sort({ timestamp: 1 });
-        const messages = [];
-        yield cursor.forEach(msg => {
-            messages.push({ role: msg.role, content: msg.content });
         });
-        return messages;
     });
-}
+}, { name: "Histórico de mensagens do chat", run_type: "tool" });
+// recupera o histórico de mensagens
+exports.retrieverSessionHistory = (0, traceable_1.traceable)(function retrieverSessionHistory(sessionId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const history = chatHistories[sessionId] || [];
+        return history.map(msg => ({
+            role: msg.role,
+            content: msg.content
+        }));
+    });
+}, { name: "Recupera Histórico de mensagens", run_type: "retriever" });
+// limpa o historico de mensagem
 function clearAllChatHistory() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            console.log("[Memory] 🗑️ Limpando histórico de chat...");
-            const result = yield config_1.memoryCollection.deleteMany({});
-            console.log(`[Memory] ✅ Histórico limpo: ${result.deletedCount} mensagens removidas`);
-            return result.deletedCount;
+            console.log("[Memory] 🗑️ Limpando histórico de chat em memória...");
+            const count = Object.keys(chatHistories).length;
+            for (const key in chatHistories) {
+                delete chatHistories[key];
+            }
+            console.log(`[Memory] ✅ Histórico limpo: ${count} sessões removidas`);
+            return count;
         }
         catch (error) {
             console.error("[Memory] ❌ Erro ao limpar histórico:", error);
@@ -55,13 +61,18 @@ function clearAllChatHistory() {
         }
     });
 }
+// limpa a seção.
 function clearSessionHistory(sessionId) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            console.log(`[Memory] 🗑️ Limpando histórico da sessão: ${sessionId}`);
-            const result = yield config_1.memoryCollection.deleteMany({ session_id: sessionId });
-            console.log(`[Memory] ✅ Histórico da sessão limpo: ${result.deletedCount} mensagens removidas`);
-            return result.deletedCount;
+            console.log(`[Memory] 🗑️ Limpando histórico da sessão em memória: ${sessionId}`);
+            if (chatHistories[sessionId]) {
+                const count = chatHistories[sessionId].length;
+                delete chatHistories[sessionId];
+                console.log(`[Memory] ✅ Histórico da sessão limpo: ${count} mensagens removidas`);
+                return count;
+            }
+            return 0;
         }
         catch (error) {
             console.error("[Memory] ❌ Erro ao limpar histórico da sessão:", error);

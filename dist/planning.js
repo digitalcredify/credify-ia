@@ -1,5 +1,10 @@
 "use strict";
-// esse arquivo incluira vários prompts e chamadas LLM para determinar o fluxo de execução do agente
+/**
+ * @fileoverview
+ * este arquivo é o mais complexo do sistema, possui varias funcionalidades.
+ * 1 - Seleção e execução de ferramentas
+ * 2- geração de r4esposta final.
+ */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -9,14 +14,347 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __asyncValues = (this && this.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.OpenAiChatCompleiton = OpenAiChatCompleiton;
-exports.toolSelector = toolSelector;
-exports.generateResponse = generateResponse;
+exports.generateResponse = exports.runToolSelectorAgent = exports.generateResponseOpenAI = void 0;
+const traceable_1 = require("langsmith/traceable");
+const messages_1 = require("@langchain/core/messages");
 const config_1 = require("./config");
 const memory_1 = require("./memory");
 const tools_1 = require("./tools");
-const MARKDOWN_RESPONSE_POLICY = `
+// essa função gera a resposta da pergunta
+exports.generateResponseOpenAI = (0, traceable_1.traceable)(function OpenAiChatCompleiton(messages_2) {
+    return __awaiter(this, arguments, void 0, function* (messages, // historico de mensagem
+    modelType = "advanced", // modelos pre definidos (com a intenção de diminuir a latência)
+    onChunk // streaming
+    ) {
+        var _a, e_1, _b, _c;
+        try {
+            /**
+             * Indentifica o papel da mensagem
+             * Converte as mensagens em formato langchain
+             * Qualquer coisa fora do padrão é mensagen di tipo HumanMessage, para garantir que nada quebre
+             */
+            const langchainMessages = messages.map((msg) => {
+                if (msg.role === "system")
+                    return new messages_1.SystemMessage(msg.content);
+                if (msg.role === "user")
+                    return new messages_1.HumanMessage(msg.content);
+                if (msg.role === "assistant")
+                    return new messages_1.AIMessage(msg.content);
+                return new messages_1.HumanMessage(msg.content);
+            });
+            // define o modelo
+            let selectedModel;
+            if (modelType === "advanced") {
+                selectedModel = config_1.advancedModel;
+            }
+            else if (modelType === "balanced") {
+                selectedModel = config_1.balancedModel;
+            }
+            else {
+                selectedModel = config_1.fastModel;
+            }
+            // caso seja o streaming esteja ativado, vai fazer o streaming
+            if (onChunk) {
+                const stream = yield selectedModel.stream(langchainMessages);
+                let fullResponse = "";
+                try {
+                    for (var _d = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = yield stream_1.next(), _a = stream_1_1.done, !_a; _d = true) {
+                        _c = stream_1_1.value;
+                        _d = false;
+                        const chunk = _c;
+                        const content = String(chunk.content || "");
+                        if (content) {
+                            onChunk(content);
+                        }
+                        fullResponse += content;
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (!_d && !_a && (_b = stream_1.return)) yield _b.call(stream_1);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                return fullResponse;
+            }
+            else {
+                // invoka a resposta do llm
+                const response = yield selectedModel.invoke(langchainMessages);
+                return String(response.content);
+            }
+        }
+        catch (error) {
+            console.error("Error in OpenAiChatCompletion:", error);
+            throw error;
+        }
+    });
+}, {
+    name: "Generate Responde OpenAI",
+    run_type: "llm",
+    metadata: {
+        provider: "OpenAI"
+    }
+});
+// essa função é um agente que pega o input do usuário e com base nele determina qual a tool mais adequada.
+exports.runToolSelectorAgent = (0, traceable_1.traceable)(function toolSelector(userInput_1) {
+    return __awaiter(this, arguments, void 0, function* (userInput, // input do usuario
+    sessionHistory = [] // historico da conversa
+    ) {
+        // prompt de instrução do sistema.
+        const systemPrompt = `
+            Você é um roteador de tarefas inteligente. Analise a INTENÇÃO da pergunta, não apenas as palavras exatas.
+
+            ### Ferramentas Disponíveis
+
+                1. **specific_query_tool**: Busca informações específicas sobre UMA entidade.
+        
+                    **Quando usar:**
+                    - Pergunta menciona nome específico de empresa, representante, organização, etc.
+                    - Usuário quer saber sobre UM item específico
+                    - Funciona para QUALQUER propriedade: documento, plano, tipo, revenue, etc.
+        
+                    **Exemplos (não limitado a estes):**
+                        - "Qual o documento da iFood?"
+                        - "Me fale o plano da SEM PARAR"
+                        - "Qual o tipo da CREDIFY?"
+                        - "Qual a organização do SEGUNDO CARTÓRIO?"
+                        - "Qual o revenue da iFood?"
+        
+                    **Variações aceitas:**
+                        - "iFood tem qual documento?" → ✅ Mesma intenção
+                        - "Me mostre o plano da SEM PARAR" → ✅ Mesma intenção
+        
+                    **Retorno:**
+                    {"tool": "specific_query_tool", "input": {"query": "...", "filters": {}}}
+
+                2. **aggregate_tool**: Agrega dados por QUALQUER campo.
+        
+                    **Quando usar:**
+                        - Pergunta pede comparação, ranking ou total de MÚLTIPLOS itens
+                        - Usuário quer ver dados agrupados
+                        - Funciona para: representative, company, organization, revenue, plan, company_type, etc.
+        
+                    **Exemplos (não limitado a estes):**
+                        - "Desempenho por representante" → groupBy: "representative"
+                        - "Desempenho por empresa" → groupBy: "company"
+                        - "Agregue por organização" → groupBy: "organization"
+                        - "Total por revenue" → groupBy: "revenue"
+                        - "Agrupe por plano" → groupBy: "plan"
+                        - "Empresas por tipo" → groupBy: "company_type"
+
+                        **Variações aceitas:**
+                        - "Mostre cada representante" → ✅ groupBy: "representative"
+                        - "Ranking de vendedores" → ✅ groupBy: "representative"
+                        - "Compare as empresas" → ✅ groupBy: "company"
+        
+                    **Retorno:**
+                    {"tool": "aggregate_tool", "input": {"query": "...", "filters": {}, "groupBy": "representative"}}
+        
+                    **⚠️ IMPORTANTE:** Você DEVE especificar o campo "groupBy" no input!
+
+                3. **hybrid_search_tool**: Busca híbrida (fallback).
+        
+                    **Quando usar:**
+                    - Pergunta é ambígua, complexa ou não se encaixa claramente nas outras tools
+                    - Você não tem certeza qual tool usar
+        
+                    **Exemplos:**
+                    - "Me explique como funciona..."
+                    - "Análise detalhada de..."
+                    - "Me fale sobre esses dados"
+        
+                    **Retorno:**
+                    {"tool": "hybrid_search_tool", "input": {"query": "...", "filters": {}}}
+
+                4. **none**: APENAS para cumprimentos e agradecimentos.
+        
+                    **Quando usar:**
+                    - "oi", "olá", "bom dia"
+                    - "obrigado", "valeu", "até logo"
+        
+                    **Retorno:**
+                    {"tool": "none", "input": "..."}
+
+            ### ⚠️ REGRAS CRÍTICAS:
+                1. **Analise a INTENÇÃO**, não as palavras exatas
+                2. **Os exemplos são ilustrativos**, não limitantes
+                3. **Para agregação, SEMPRE especifique "groupBy"**
+                4. **SE VOCÊ NÃO TEM CERTEZA** qual tool usar, escolha **hybrid_search_tool**
+                5. **Formato JSON:** Retorne APENAS o JSON da ferramenta
+
+            ### Exemplos Completos
+
+            **Exemplo 1: Específica**
+                Histórico: []
+                Usuário: "Qual o documento da iFood?"
+                Retorno:
+                {"tool": "specific_query_tool", "input": {"query": "documento da iFood", "filters": {}}}
+
+            **Exemplo 2: Agregação por Representante**
+                Histórico: []
+                Usuário: "desempenho por representante"
+                Retorno:
+                {"tool": "aggregate_tool", "input": {"query": "desempenho de todos os representantes", "filters": {}, "groupBy": "representative"}}
+
+            **Exemplo 3: Agregação por Plano**
+                Histórico: []
+                Usuário: "agrupe por plano"
+                Retorno:
+                {"tool": "aggregate_tool", "input": {"query": "dados agrupados por plano", "filters": {}, "groupBy": "plan"}}
+
+            **Exemplo 4: Agregação por Tipo de Empresa**
+                Histórico: []
+                Usuário: "compare empresas master e unique"
+                Retorno:
+                {"tool": "aggregate_tool", "input": {"query": "comparação entre tipos de empresa", "filters": {}, "groupBy": "company_type"}}
+
+            **Exemplo 5: Ambígua (Fallback)**
+                Histórico: []
+                Usuário: "me explique como funciona"
+                Retorno:
+                {"tool": "hybrid_search_tool", "input": {"query": "explicação sobre funcionamento", "filters": {}}}
+
+            **Exemplo 6: Cumprimento**
+                Histórico: [ ... ]
+                Usuário: "muito obrigado"
+                Retorno:
+                {"tool": "none", "input": "muito obrigado"}
+
+    `.trim();
+        // monta o histórico completo da conversa que sera enviada ao sistema.
+        const messages = [
+            { role: "system", content: systemPrompt },
+            ...sessionHistory,
+            { role: "user", content: userInput }
+        ];
+        try {
+            // envia as mensagens para o llm e retorna a resposta
+            const response = yield (0, exports.generateResponseOpenAI)(messages, "balanced");
+            let toolCall;
+            try {
+                // converte a resposta para json
+                toolCall = JSON.parse(response);
+            }
+            catch (parseError) {
+                console.warn("⚠️ Erro ao parsear JSON. Usando fallback...");
+                // caso haja alguma falha utiliza a ferramenta hybrid (generica)
+                return {
+                    tool: "hybrid_search_tool",
+                    input: { query: userInput, filters: {} }
+                };
+            }
+            // ferramentas validas
+            const validTools = [
+                "specific_query_tool",
+                "aggregate_tool",
+                "hybrid_search_tool",
+                "none"
+            ];
+            if (!toolCall || !toolCall.tool || !validTools.includes(toolCall.tool)) {
+                console.warn("⚠️ Tool inválida. Usando fallback.");
+                return {
+                    tool: "hybrid_search_tool",
+                    input: { query: userInput, filters: {} }
+                };
+            }
+            if (!toolCall.input) {
+                toolCall.input = { query: userInput, filters: {} };
+            }
+            // ??
+            if (toolCall.tool === "aggregate_tool" && !toolCall.input.groupBy) {
+                toolCall.input.groupBy = "company";
+            }
+            console.log("✅ Tool selecionada:", toolCall.tool);
+            return {
+                tool: toolCall.tool,
+                input: toolCall.input
+            };
+        }
+        catch (error) {
+            console.error("❌ Erro no toolSelector:", error);
+            return {
+                tool: "hybrid_search_tool",
+                input: { query: userInput, filters: {} }
+            };
+        }
+    });
+}, {
+    name: "Tool Selector",
+    run_type: "chain",
+    metadata: {
+        purpose: "Route user query to appropriate tool",
+        model: "gpt-4o"
+    }
+});
+const getLlmResponse = (0, traceable_1.traceable)(function getLlmResponse(messages_2, systemMessageContent_1) {
+    return __awaiter(this, arguments, void 0, function* (messages, systemMessageContent, modelType = "advanced", onChunk) {
+        const fullMessages = [
+            { role: "system", content: systemMessageContent },
+            ...messages
+        ];
+        const response = yield (0, exports.generateResponseOpenAI)(fullMessages, modelType, onChunk);
+        return response;
+    });
+}, {
+    name: "Get LLM Response",
+    run_type: "chain",
+    metadata: {
+        purpose: "Generate final response with system prompt"
+    }
+});
+/**
+ * Função principal que orquestra todo o processo. Ela é responsável por:
+ *
+ *
+ */
+exports.generateResponse = (0, traceable_1.traceable)(function generateResponse(sessionId, // sessão do chat do usuario
+userInput, // pergunta do usuario
+onChunk // streaming
+) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // armazena a pergunta do usuáiro no histórico de seção.
+        yield (0, memory_1.storeChatMessage)(sessionId, "user", userInput);
+        // recupera todo o histórico da conversa, para entender o contexto
+        const sessionHistory = yield (0, memory_1.retrieverSessionHistory)(sessionId);
+        // ?
+        const llmInput = [...sessionHistory];
+        // retorno da função que seleciona a ferramenta
+        const { tool, input: toolInput } = yield (0, exports.runToolSelectorAgent)(userInput, sessionHistory);
+        console.log("🔧 Tool selecionada:", tool);
+        let response;
+        if (tool === "specific_query_tool") {
+            console.log("🔍 Executando specific_query_tool...");
+            const finalFilters = { "month": sessionId };
+            const finalToolInput = {
+                query: toolInput.query || userInput,
+                filters: finalFilters
+            };
+            const contextResults = yield (0, tools_1.specificQueryTool)(finalToolInput);
+            const context = contextResults
+                .map((doc) => { var _a; return ((_a = doc.document) === null || _a === void 0 ? void 0 : _a.pageContent) || JSON.stringify(doc); })
+                .join('\n---\n');
+            const systemMessageContent = `
+Você é um analista financeiro experiente. Responda usando o contexto fornecido.
+
+**FORMATAÇÃO MONETÁRIA:**
+- Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
+- Exemplo correto: R$ 316.852,50
+- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- NUNCA use vírgula para separador de milhares
+
+**CONVERSÃO DE VALORES:**
+- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
+- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
+
 ### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
 
 Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
@@ -35,232 +373,132 @@ Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
 6. **Listas:** Use listas numeradas ou com marcadores para explicar passos, métricas ou observações.
 7. **Emojis (opcional):** Pode usar ícones (📊, 💰, ⚙️) para dar contexto visual.
 8. **Proibido:** Não retornar texto puro sem Markdown.
+- Seja conciso mas informativo
 
-Resuma tudo sempre em formato legível e estruturado, com foco em clareza e consistência visual.
-`.trim();
-function OpenAiChatCompleiton(messages) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const completion = yield config_1.openAIClient.chat.completions.create({
-                model: config_1.OPENAI_MODEL,
-                messages,
-                // max_tokens: 1024,
-            });
-            return completion.choices[0].message.content;
+
+Contexto:
+${context}`.trim();
+            response = yield getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
         }
-        catch (error) {
-            console.error("Error in openAIChatCompletion:", error);
-            throw error;
-        }
-    });
-}
-function toolSelector(userInput_1) {
-    return __awaiter(this, arguments, void 0, function* (userInput, sessionHistory = []) {
-        const systemPrompt = `
-    Você é um roteador de tarefas inteligente. Sua principal função é analisar a PERGUNTA MAIS RECENTE do usuário e o HISTÓRICO DA CONVERSA para selecionar a ferramenta correta.
-
-    ### Ferramentas Disponíveis
-    - vector_search_tool: Recupera dados financeiros de empresas (consumo, valores, etc.).
-    - calculator_tool: Para operações matemáticas.
-    - none: Para perguntas gerais (ex: "oi", "obrigado").
-
-    ### Regras de Roteamento
-    1.  **Analise o Histórico:** Preste MUITA atenção no histórico. Se a nova pergunta for uma continuação (ex: "e do mario?", "e da outra empresa?"), sua tarefa é manter a MESMA INTENÇÃO da pergunta anterior (ex: "gerar relatório").
-    2.  **NÃO extraia filtros:** Retorne SEMPRE "filters": {} para vector_search_tool. A busca vetorial semântica é suficiente.
-    3.  **Formato JSON:** Retorne APENAS o JSON da ferramenta.
-
-    ### Exemplos
-
-    **Exemplo 1: Pergunta Específica**
-    Histórico: []
-    Usuário: "Qual o total de consumo da CREDIFY?"
-    Retorno:
-    {"tool": "vector_search_tool", "input": {"query": "total de consumo da CREDIFY", "filters": {}}}
-
-    **Exemplo 2: Pergunta Vaga**
-    Histórico: [ { "role": "user", "content": "Me fale sobre o iFood" }, { "role": "assistant", "content": "(Relatório do iFood...)" } ]
-    Usuário: "e da SEM PARAR?"
-    Retorno:
-    {"tool": "vector_search_tool", "input": {"query": "relatório completo da SEM PARAR", "filters": {}}}
-
-    **Exemplo 3: Pergunta de Continuação**
-    Histórico: [ { "role": "user", "content": "relatorio do representante pedro maia" }, { "role": "assistant", "content": "(Relatório completo do Pedro Maia...)" } ]
-    Usuário: "agora quero do mario monteiro"
-    Retorno:
-    {"tool": "vector_search_tool", "input": {"query": "relatório completo do representante mario monteiro", "filters": {}}}
-    
-    **Exemplo 4: Pergunta Geral**
-    Histórico: [ ... ]
-    Usuário: "muito obrigado"
-    Retorno:
-    {"tool": "none", "input": "muito obrigado"}
-`.trim();
-        const messages = [
-            { role: "system", content: systemPrompt },
-            ...sessionHistory,
-        ];
-        try {
-            const response = yield OpenAiChatCompleiton(messages);
-            let toolCall;
-            try {
-                if (response)
-                    toolCall = JSON.parse(response);
-            }
-            catch (error) {
-                try {
-                    toolCall = eval(`(${response})`);
-                }
-                catch (error) {
-                    return { tool: "none", input: userInput };
-                }
-            }
-            return {
-                tool: toolCall.tool || "none",
-                input: toolCall.input || userInput
-            };
-        }
-        catch (error) {
-            console.log("error no toolSelector", error);
-            return { tool: "none", input: userInput };
-        }
-    });
-}
-function getLlmResponse(messages, systemMessageContet) {
-    return __awaiter(this, void 0, void 0, function* () {
-        console.log(messages);
-        const systemMessage = { role: "system", content: `${systemMessageContet}\n\n${MARKDOWN_RESPONSE_POLICY}` };
-        let fullMessages;
-        if (messages.some((msg) => msg.role === 'system')) {
-            fullMessages = [...messages, systemMessage];
-        }
-        else {
-            fullMessages = [systemMessage, ...messages];
-        }
-        const response = yield OpenAiChatCompleiton(fullMessages);
-        return response;
-    });
-}
-function generateResponse(sessionId, userInput) {
-    return __awaiter(this, void 0, void 0, function* () {
-        yield (0, memory_1.storeChatMessage)(sessionId, "user", userInput);
-        const sessionHistory = yield (0, memory_1.retrieverSessionHistory)(sessionId);
-        const llmInput = [...sessionHistory];
-        const { tool, input: toolInput } = yield toolSelector(userInput, sessionHistory);
-        console.log("Tool selecionada:", tool);
-        let response;
-        if (tool === "vector_search_tool") {
-            const finalFilters = {
-                "month": sessionId
-            };
+        else if (tool === "aggregate_tool") {
+            console.log("📊 Executando aggregate_tool...");
+            const finalFilters = { "month": sessionId };
             const finalToolInput = {
-                query: toolInput.query,
+                query: toolInput.query || userInput,
+                filters: finalFilters,
+                groupBy: toolInput.groupBy || "company"
+            };
+            const contextResults = yield (0, tools_1.aggregateTool)(finalToolInput);
+            const contextData = JSON.parse(contextResults[0].document.pageContent);
+            const context = JSON.stringify(contextData, null, 2);
+            const systemMessageContent = `
+Você é um analista financeiro experiente. Os dados fornecidos JÁ ESTÃO AGREGADOS.
+NÃO precisa somar ou agrupar novamente! Apenas formate e analise.
+
+**FORMATAÇÃO MONETÁRIA:**
+- Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
+- Exemplo correto: R$ 316.852,50
+- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- NUNCA use vírgula para separador de milhares
+
+**CONVERSÃO DE VALORES:**
+- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
+- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
+
+### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
+
+Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
+
+**Regras de Formatação:**
+1. **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
+2. **Negrito:** Use \`**texto**\` para destacar partes importantes.
+3. **Tabelas:** Sempre que houver comparação, agregação ou múltiplos itens (empresas, representantes, meses, etc.), use tabelas Markdown no formato:
+
+   | Campo | Valor |
+   |--------|--------|
+   | Exemplo | R$ 1.234,56 |
+
+4. **Código Inline:** Use crases \`texto\` para IDs, nomes técnicos, ou campos JSON.
+5. **Separadores:** Use \`---\` para separar blocos de informação.
+6. **Listas:** Use listas numeradas ou com marcadores para explicar passos, métricas ou observações.
+7. **Emojis (opcional):** Pode usar ícones (📊, 💰, ⚙️) para dar contexto visual.
+8. **Proibido:** Não retornar texto puro sem Markdown.
+- Seja conciso mas informativo
+
+Contexto (já agregado por ${toolInput.groupBy}):
+${context}`.trim();
+            response = yield getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
+        }
+        else if (tool === "hybrid_search_tool") {
+            console.log("🔀 Executando hybrid_search_tool...");
+            const finalFilters = { "month": sessionId };
+            const finalToolInput = {
+                query: toolInput.query || userInput,
                 filters: finalFilters
             };
-            const contextResults = yield (0, tools_1.vectorSearchTool)(finalToolInput);
-            const context = contextResults.map(doc => { var _a; return ((_a = doc.document) === null || _a === void 0 ? void 0 : _a.pageContent) || JSON.stringify(doc); }).join('\n---\n');
+            const contextResults = yield (0, tools_1.hybridSearchTool)(finalToolInput);
+            const context = contextResults
+                .map((doc) => { var _a; return ((_a = doc.document) === null || _a === void 0 ? void 0 : _a.pageContent) || JSON.stringify(doc); })
+                .join('\n---\n');
             const systemMessageContent = `
-            Você é um analista financeiro sênior. Sua tarefa é usar o contexto JSON fornecido para responder perguntas, calcular métricas financeiras e agregar dados sob demanda.
+Você é um analista financeiro experiente. Faça uma análise abrangente e detalhada.
 
-            ### 1. Dicionário de Campos-Chave (Blocos de Construção)
-            (Use estes campos para todos os cálculos)
-            * 'totalConsumptions': O **Volume** (número total de transações/consultas).
-            * 'totalValueInCents': A **Receita Bruta** (valor total, ANTES de descontos).
-            * 'totalValueWithDiscountInCents': A **Receita Pós-Desconto** (base para cálculos de lucro).
-            * 'totalSourcesCostInCents': O **Custo Direto** (custo de insumos).
-            * 'company.name', 'representative.name', 'organization.name': Campos de agrupamento.
+**FORMATAÇÃO MONETÁRIA:**
+- Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
+- Exemplo correto: R$ 316.852,50
+- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- NUNCA use vírgula para separador de milhares
 
-            ### 2. Regra de Formatação Monetária (Obrigatória e Crítica)
-            Esta é a regra mais importante. Os campos "InCents" NÃO são centavos comuns. Eles possuem 4 casas decimais de precisão.
+**CONVERSÃO DE VALORES:**
+- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
+- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
 
-            **NÃO FAÇA ISSO (ERRADO):**
-            * NUNCA divida o valor por 100.
-            * Exemplo ERRADO: O valor '172800' dividido por 100 é 1728,00. **ISSO ESTÁ INCORRETO.**
-            * Exemplo ERRADO: O valor '128900000' dividido por 100 é 1289000,00. **ISSO ESTÁ INCORRETO.**
+### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
 
-            **FAÇA ISSO (CORRETO):**
-            * Você **DEVE OBRIGATORIAMENTE DIVIDIR o valor por 10.000** (dez mil).
-            * **Exemplo Correto 1:** O valor '172800' DEVE ser '172800 / 10000' = **17.28**. Formato final: **R$ 17,28**.
-            * **Exemplo Correto 2:** O valor '128900000' DEVE ser '128900000 / 10000' = **12890.00**. Formato final: **R$ 12.890,00**.
-            * **Exemplo Correto 3:** O valor '513831500' DEVE ser '513831500 / 10000' = **51383.15**. Formato final: **R$ 51.383,15**.
-            
-            Repito: para converter 'InCents' para Reais, **SEMPRE DIVIDA POR 10.000**.
+Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
 
-            ### 3. Regras de Raciocínio e Cálculo
-            * **Flexibilidade:** Use seu conhecimento financeiro para combinar os "Blocos de Construção" e calcular métricas (Rentabilidade, Margem de Lucro, Custo por Consumo, etc.).
-            * **Agregação:** Se o usuário pedir um total "por representante" ou "geral", você DEVE inspecionar TODOS os documentos JSON no contexto, agrupar e SOMAR os valores.
-            * **Exemplos de Cálculo:**
-                * **Receita Líquida (Lucro Bruto):** \`'totalValueWithDiscountInCents' - 'totalSourcesCostInCents'\`
-                * **Rentabilidade (Margem de Custo):** \`('totalSourcesCostInCents' / 'totalValueWithDiscountInCents')\` (Exiba como %)
+**Regras de Formatação:**
+1. **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
+2. **Negrito:** Use \`**texto**\` para destacar partes importantes.
+3. **Tabelas:** Sempre que houver comparação, agregação ou múltiplos itens (empresas, representantes, meses, etc.), use tabelas Markdown no formato:
 
-            ### 4. FORMATAÇÃO DA RESPOSTA (MARKDOWN OBRIGATÓRIO)
-            Você DEVE formatar suas respostas usando **Markdown**.
+   | Campo | Valor |
+   |--------|--------|
+   | Exemplo | R$ 1.234,56 |
 
-            **Regras de Formatação:**
-            1.  **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
-            2.  **Negrito:** Use \`**texto**\` para destacar valores importantes, nomes e totais.
-            3.  **Listas:** Use listas numeradas ou com marcadores.
-            4.  **Tabelas:** Use tabelas Markdown para comparações de múltiplas empresas ou representantes.
-            5.  **Código Inline:** Use \`texto\` (crases) para valores técnicos (CNPJ, IDs).
-            6.  **Separação:** Use \`---\` para separar seções.
-            7.  **Emojis (Opcional):** Use com moderação (ex: 📊, 💰).
+4. **Código Inline:** Use crases \`texto\` para IDs, nomes técnicos, ou campos JSON.
+5. **Separadores:** Use \`---\` para separar blocos de informação.
+6. **Listas:** Use listas numeradas ou com marcadores para explicar passos, métricas ou observações.
+7. **Emojis (opcional):** Pode usar ícones (📊, 💰, ⚙️) para dar contexto visual.
+8. **Proibido:** Não retornar texto puro sem Markdown.
+- Seja direto mas completo
 
-            **Exemplos de Respostas Formatadas:**
-
-            **Exemplo 1 (Valor Único):**
-            \`\`\`
-            ## 💰 Receita Líquida da Ifood
-            
-            A receita líquida (Lucro Bruto) da **Ifood** é de **R$ 39.813,55**.
-            
-            * **Receita Pós-Desconto:** R$ 51.383,15
-            * **Custo Direto:** R$ 11.569,60
-            \`\`\`
-
-            **Exemplo 2 (Tabela de Agregação):**
-            \`\`\`
-            ## 📊 Rentabilidade por Representante
-
-            | Representante | Receita Líquida | Custo Direto | Rentabilidade (Margem de Custo) |
-            |---------------|-----------------|--------------|---------------------------------|
-            | Pedro Maia    | R$ 90.123,45    | R$ 15.123,00 | 16.78%                          |
-            | Mario Monteiro| R$ 70.456,12    | R$ 10.456,00 | 14.84%                          |
-            
-            ---
-            O representante **Pedro Maia** possui a maior rentabilidade.
-            \`\`\`
-
-            ### 5. Processo de Resposta
-            1.  Analise o pedido do usuário (ex: "rentabilidade por representante").
-            2.  Localize os objetos JSON relevantes no 'Contexto:' abaixo.
-            3.  Aplique as **Regras de Raciocínio e Cálculo** (Seção 3).
-            4.  Aplique a **Regra de Formatação Monetária CORRETA (Seção 2)**.
-            5.  Formate a resposta final seguindo as **Regras de Formatação Markdown** (Seção 4).
-            6.  Se os dados não existirem, diga 'EU NÃO SEI'.
-
-            Contexto:
-            ${context}`.trim();
-            response = yield getLlmResponse(llmInput, systemMessageContent);
+Contexto:
+${context}`.trim();
+            response = yield getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
         }
         else if (tool === "calculator_tool") {
+            console.log("🧮 Executando calculator_tool...");
             response = (0, tools_1.calculatorTool)(toolInput);
+            if (onChunk) {
+                onChunk(response);
+            }
         }
         else {
+            console.log("💬 Nenhuma tool necessária (cumprimento)");
             const systemMessageContent = `
-            Você é um assistente prestativo. Responda à solicitação do usuário da melhor forma possível com base no histórico da conversa.
-
-            **FORMATAÇÃO DA RESPOSTA (MARKDOWN OBRIGATÓIO):**
-            Você DEVE formatar suas respostas usando **Markdown**.
-
-            **Regras de Formatação:**
-            1.  **Títulos:** Use \`##\` para títulos principais e \`###\` para subtítulos.
-            2.  **Negrito:** Use \`**texto**\` para destacar partes importantes.
-            3.  **Listas:** Use listas numeradas ou com marcadores.
-            4.  **Código Inline:** Use \`texto\` (crases) para valores técnicos, se houver.
-            5.  **Separação:** Use \`---\` para separar seções.
-        `.trim();
-            response = yield getLlmResponse(llmInput, systemMessageContent);
+                Você é um assistente prestativo. Seja cordial.
+                Use Markdown se necessário.
+            `.trim();
+            response = yield getLlmResponse(llmInput, systemMessageContent, "fast", onChunk);
         }
         yield (0, memory_1.storeChatMessage)(sessionId, "system", response);
         return response;
     });
-}
+}, {
+    name: "Generate Response",
+    run_type: "chain",
+    metadata: {
+        purpose: "Main orchestration with optimized model selection and streaming"
+    }
+});

@@ -1,5 +1,4 @@
-import { ensureMongoConnection } from "../config";
-import { checkIfDataExists, createVectorIndex, ingestData } from "../scripts/ingest-data";
+import { checkIfDataExists, ingestData } from "../scripts/ingest-data";
 import { generateResponse } from "../planning";
 import { isCurrentMonth } from "../utils/dateUtils";  
 
@@ -12,9 +11,8 @@ export const runWebAgent = async (
 ) => {
     
     try {
-        await ensureMongoConnection();
-        console.log("[Web Agent] MongoDB pronto para uso.");
-        
+        // Não é mais necessário conectar ao MongoDB, o Qdrant é gerenciado automaticamente
+        console.log("[Web Agent] Iniciando processamento com Qdrant...");
         
         const isCurrentMonthFlag = isCurrentMonth(targetMonth);
         
@@ -23,7 +21,7 @@ export const runWebAgent = async (
             console.log(`[Web Agent] 🔄 Reingerindo dados (dados dinâmicos)...`);
             
             await ingestData(jsonData, targetMonth);
-            await createVectorIndex();
+            // createVectorIndex não é mais necessário, o QdrantVectorStore cria a coleção automaticamente
             
             console.log(`[Web Agent] ✅ Reingestão concluída`);
             
@@ -33,13 +31,12 @@ export const runWebAgent = async (
             if (!dataExists) {
                 console.log(`[Web Agent] Iniciando ingestão para ${targetMonth}...`);
                 await ingestData(jsonData, targetMonth);
-                await createVectorIndex();
             } else {
                 console.log(`[Web Agent] Dados para ${targetMonth} já existem.`);
             }
         }
 
-        
+        // Gera a resposta usando os dados do Qdrant
         const response = await generateResponse(targetMonth, pergunta, onChunk);
         return response;
 
