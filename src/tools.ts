@@ -98,14 +98,19 @@ export const aggregateTool = traceable(
                         totalValueInReais: 0,
                         totalValueWithDiscountInReais: 0,
                         totalSourcesCostInReais: 0,
+                        lucro: 0,
                         count: 0
                     };
                 }
 
+                const valueWithDiscount = data.totals?.totalValueWithDiscountInReais || 0;
+                const sourcesCost = data.totals?.totalSourcesCostInReais || 0;
+                
                 grouped[groupKey].totalConsumptions += data.totals?.totalConsumptions || 0;
                 grouped[groupKey].totalValueInReais += data.totals?.totalValueInReais || 0;
-                grouped[groupKey].totalValueWithDiscountInReais += data.totals?.totalValueWithDiscountInReais || 0;
-                grouped[groupKey].totalSourcesCostInReais += data.totals?.totalSourcesCostInReais || 0;
+                grouped[groupKey].totalValueWithDiscountInReais += valueWithDiscount;
+                grouped[groupKey].totalSourcesCostInReais += sourcesCost;
+                grouped[groupKey].lucro += (valueWithDiscount - sourcesCost);
                 grouped[groupKey].count += 1;
             }
 
@@ -146,6 +151,7 @@ export const aggregateTool = traceable(
     },
     { name: "Aggregate Tool (Qdrant)", run_type: "tool" }
 );
+
 
 
 export const hybridSearchTool = traceable(

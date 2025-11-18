@@ -313,8 +313,6 @@ const getLlmResponse = traceable(
 
 /**
  * Função principal que orquestra todo o processo. Ela é responsável por:
- * 
- * 
  */
 export const generateResponse = traceable(
     async function generateResponse(
@@ -390,7 +388,7 @@ Contexto:
 ${context}`.trim();
             
             
-            response = await getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
+            response = await getLlmResponse(llmInput, systemMessageContent, "fast", onChunk);
         }
         
         
@@ -445,7 +443,7 @@ Contexto (já agregado por ${toolInput.groupBy}):
 ${context}`.trim();
             
             
-            response = await getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
+            response = await getLlmResponse(llmInput, systemMessageContent, "fast", onChunk);
         }
         
         
@@ -499,7 +497,7 @@ Contexto:
 ${context}`.trim();
             
             
-            response = await getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
+            response = await getLlmResponse(llmInput, systemMessageContent, "fast", onChunk);
         }
         
         
@@ -531,7 +529,7 @@ ${context}`.trim();
 
     },
     {
-        name: "Generate Response",
+        name: "Generate Response - novo",
         run_type: "chain",
         metadata: {
             purpose: "Main orchestration with optimized model selection and streaming"

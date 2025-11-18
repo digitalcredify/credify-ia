@@ -77,7 +77,7 @@ async function ensureCollectionExists() {
             try {
                 await qdrantClient.createCollection(QDRANT_COLLECTION_NAME, {
                     vectors: {
-                        size: 3072,
+                        size: 1536,
                         distance: "Cosine"
                     }
                 });
@@ -207,7 +207,7 @@ Período: ${month}
             throw error;
         }
     },
-    { name: "Ingestão de dados - Qdrant", run_type: "tool" }
+    { name: "Ingestão de dados - novo", run_type: "tool" }
 )
 
 export async function checkIfDataExists(month: string): Promise<boolean> {

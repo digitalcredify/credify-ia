@@ -10,9 +10,9 @@ import { JsonOutputParser } from "@langchain/core/output_parsers";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HumanMessage } from "langchain";
 import { z } from "zod";
-import { middleModel } from "../utils/models";
 import { runWebAgent } from "../agents/webAgent";
 import { runPdfAgent } from "../agents/pdfAgent";
+import { fastModel } from "../config";
 
 // define um molde para o json retornado pelo roteador.
 const routerSchema = 
@@ -55,7 +55,7 @@ const runClassifyAgent = async (pergunta: string) => {
      * chain 1: o prompt é passado para o modelo
      * chain 2: a saida do modelo é convertida em um obsjon json
     */
-    const routerAgent = routerPromptTemplate.pipe(middleModel).pipe(new JsonOutputParser())
+    const routerAgent = routerPromptTemplate.pipe(fastModel).pipe(new JsonOutputParser())
 
     try {
 

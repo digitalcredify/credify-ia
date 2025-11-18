@@ -6,15 +6,17 @@
 import express from 'express';
 import cors from 'cors';
 import agent from './src/routes/agentRoute';
+import operationAgent from './src/routes/operationAgentRoute';
 import { clearAllChatHistory } from './src/memory';
 
 
 const app = express();
-const PORT = 3090;
+const PORT = 3080;
 
 app.use(cors());
 app.use(express.json());
 app.use('/api', agent);
+app.use('/api', operationAgent);
 
 async function startServer() {
     try {

@@ -1,7 +1,6 @@
 /**
  * @fileoverview direiciona o caminho do endpoint POST/agent ao controller
- * 
- */
+*/
 import express from 'express'
 import { agentController } from '../controllers/agentController'
 

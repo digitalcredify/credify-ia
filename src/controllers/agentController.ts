@@ -29,7 +29,7 @@ export const agentController = async (req: Request, res: Response) => {
             /**
              * configuranção de cabecalhos HTTP para um conexão Server-sant Events(SSE)
              * SSE: mantém a conexão aberta para que o servidor possa enviar múltipos eventos.
-             */
+            */
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');

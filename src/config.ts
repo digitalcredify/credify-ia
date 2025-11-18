@@ -27,7 +27,7 @@ export const qdrantClient = new QdrantClient({
 
 export const openAiEmbbeding = new OpenAIEmbeddings({
     apiKey: apiKeyOpenAi,
-    model: 'text-embedding-3-large',
+    model: 'text-embedding-3-small',
 });
 
 
