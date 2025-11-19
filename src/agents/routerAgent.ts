@@ -1,7 +1,7 @@
 
 import { JsonOutputParser } from "@langchain/core/output_parsers";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { fastModel } from "src/config";
+import { fastModel } from "../config";
 import { z } from "zod";
 
 const routerSchema = z.object({

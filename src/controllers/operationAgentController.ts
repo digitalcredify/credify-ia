@@ -6,7 +6,7 @@
 
 import { Request, Response } from 'express';
 import { ENABLE_STREAMING } from '../config';
-import agentService from 'src/service/agentService';
+import { operationAgentService } from '../service/operationAgentService';
 
 
 export const operationAgentController = async (req: Request, res: Response) => {
@@ -15,13 +15,12 @@ export const operationAgentController = async (req: Request, res: Response) => {
 
         const { pergunta, jsonData, startDate, endDate, startHour, endHour } = req.body;
 
+        // if (!pergunta || !jsonData || !startDate || !endDate || !startHour || !endHour) {
 
-        if (!pergunta || !jsonData || !startDate || !endDate || !startHour || !endHour) {
-
-            return res.status(400).json({
-                error: "Campos obrigatórios: pergunta, jsonData, startDate, endDate, startHour, endHour"
-            })
-        }
+        //     return res.status(400).json({
+        //         error: "Campos obrigatórios: pergunta, jsonData, startDate, endDate, startHour, endHour"
+        //     })
+        // }
 
         // fluxo  com streaming.
         if (ENABLE_STREAMING) {
@@ -48,7 +47,7 @@ export const operationAgentController = async (req: Request, res: Response) => {
             }
 
             try {
-                // await operationAgentService(pergunta, jsonData, startDate, endDate, startHour, endHour, chunk)
+                await operationAgentService(pergunta, jsonData, startDate, endDate, startHour, endHour, chunk)
 
                 res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`); // fim do streaming
                 res.end()
@@ -93,6 +92,13 @@ export const operationAgentController = async (req: Request, res: Response) => {
 
 
     } catch (error) {
+         if (!res.headersSent) {
+            res.status(500).json({
+                error: error instanceof Error ? error.message : "Erro interno do servidor"
+            });
+        }
 
     }
 }
+
+

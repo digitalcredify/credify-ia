@@ -1,3 +1,5 @@
+import { ingestDataOperation } from "../../scripts/operations/ingest-data-operations";
+
 export const runOperationsChatBotAgent = async (
     pergunta:string,
     json:any,
@@ -11,6 +13,9 @@ export const runOperationsChatBotAgent = async (
     try {
 
         console.log("[Operations CB] Conectado!");
+
+        await ingestDataOperation()
+
 
         
 

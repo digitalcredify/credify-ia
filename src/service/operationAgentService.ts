@@ -9,7 +9,7 @@ import { runOperationsChatBotAgent } from "../agents/operations/operationsChatBo
 import { runRouterAgent } from "../agents/routerAgent"
 
 
-const operationAgentService = async(
+export const operationAgentService = async(
     pergunta:string,
     json:any,
     startDate:any,
