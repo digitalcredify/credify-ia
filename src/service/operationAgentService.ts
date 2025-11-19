@@ -5,7 +5,6 @@
  * PDF Agent: acionado quando o usuário pede explicitamente por um pdf.
 */
 
-import { runOperationsChatBotAgent } from "../agents/operations/operationsChatBotAgent"
 import { runRouterAgent } from "../agents/routerAgent"
 
 
@@ -28,7 +27,6 @@ export const operationAgentService = async(
 
         case 'web_agent':
 
-        return await runOperationsChatBotAgent(pergunta,json,startDate,endDate,startHour,endHour,onChunk)
 
     }
 
