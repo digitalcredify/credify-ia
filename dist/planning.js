@@ -269,7 +269,6 @@ exports.runToolSelectorAgent = (0, traceable_1.traceable)(function toolSelector(
             if (!toolCall.input) {
                 toolCall.input = { query: userInput, filters: {} };
             }
-            // ??
             if (toolCall.tool === "aggregate_tool" && !toolCall.input.groupBy) {
                 toolCall.input.groupBy = "company";
             }
@@ -313,8 +312,6 @@ const getLlmResponse = (0, traceable_1.traceable)(function getLlmResponse(messag
 });
 /**
  * Função principal que orquestra todo o processo. Ela é responsável por:
- *
- *
  */
 exports.generateResponse = (0, traceable_1.traceable)(function generateResponse(sessionId, // sessão do chat do usuario
 userInput, // pergunta do usuario
@@ -325,7 +322,6 @@ onChunk // streaming
         yield (0, memory_1.storeChatMessage)(sessionId, "user", userInput);
         // recupera todo o histórico da conversa, para entender o contexto
         const sessionHistory = yield (0, memory_1.retrieverSessionHistory)(sessionId);
-        // ?
         const llmInput = [...sessionHistory];
         // retorno da função que seleciona a ferramenta
         const { tool, input: toolInput } = yield (0, exports.runToolSelectorAgent)(userInput, sessionHistory);
@@ -346,14 +342,13 @@ onChunk // streaming
 Você é um analista financeiro experiente. Responda usando o contexto fornecido.
 
 **FORMATAÇÃO MONETÁRIA:**
+- Os valores JÁ ESTÃO EM REAIS (não precisa converter)
+- Campos como "totalValueInReais", "totalValueWithDiscountInReais" já estão prontos
 - Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
-- Exemplo correto: R$ 316.852,50
-- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- Exemplo: 11893.2337 → R$ 11.893,2337
+- Exemplo: 316852.5000 → R$ 316.852,5000
+- SEMPRE mostre exatamente 4 casas decimais após a vírgula
 - NUNCA use vírgula para separador de milhares
-
-**CONVERSÃO DE VALORES:**
-- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
-- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
 
 ### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
 
@@ -378,7 +373,7 @@ Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
 
 Contexto:
 ${context}`.trim();
-            response = yield getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
+            response = yield getLlmResponse(llmInput, systemMessageContent, "fast", onChunk);
         }
         else if (tool === "aggregate_tool") {
             console.log("📊 Executando aggregate_tool...");
@@ -396,14 +391,13 @@ Você é um analista financeiro experiente. Os dados fornecidos JÁ ESTÃO AGREG
 NÃO precisa somar ou agrupar novamente! Apenas formate e analise.
 
 **FORMATAÇÃO MONETÁRIA:**
+- Os valores JÁ ESTÃO EM REAIS (não precisa converter)
+- Campos como "totalValueInReais", "totalValueWithDiscountInReais" já estão prontos
 - Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
-- Exemplo correto: R$ 316.852,50
-- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- Exemplo: 11893.2337 → R$ 11.893,2337
+- Exemplo: 316852.5000 → R$ 316.852,5000
+- SEMPRE mostre exatamente 4 casas decimais após a vírgula
 - NUNCA use vírgula para separador de milhares
-
-**CONVERSÃO DE VALORES:**
-- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
-- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
 
 ### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
 
@@ -427,7 +421,7 @@ Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
 
 Contexto (já agregado por ${toolInput.groupBy}):
 ${context}`.trim();
-            response = yield getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
+            response = yield getLlmResponse(llmInput, systemMessageContent, "fast", onChunk);
         }
         else if (tool === "hybrid_search_tool") {
             console.log("🔀 Executando hybrid_search_tool...");
@@ -444,14 +438,13 @@ ${context}`.trim();
 Você é um analista financeiro experiente. Faça uma análise abrangente e detalhada.
 
 **FORMATAÇÃO MONETÁRIA:**
+- Os valores JÁ ESTÃO EM REAIS (não precisa converter)
+- Campos como "totalValueInReais", "totalValueWithDiscountInReais" já estão prontos
 - Use o padrão brasileiro: ponto (.) para separador de milhares, vírgula (,) para decimais
-- Exemplo correto: R$ 316.852,50
-- Exemplo correto: R$ 6.833,6666 (mantenha 4 casas decimais quando relevante)
+- Exemplo: 11893.2337 → R$ 11.893,2337
+- Exemplo: 316852.5000 → R$ 316.852,5000
+- SEMPRE mostre exatamente 4 casas decimais após a vírgula
 - NUNCA use vírgula para separador de milhares
-
-**CONVERSÃO DE VALORES:**
-- Campos terminados em "InCents" devem ser divididos por 10.000 para obter o valor em Reais
-- Aplique essa conversão automaticamente, mas NÃO mencione isso na resposta
 
 ### 🧩 POLÍTICA DE FORMATAÇÃO DE RESPOSTAS (OBRIGATÓRIA)
 
@@ -475,7 +468,7 @@ Todas as respostas devem ser formatadas em **Markdown**, SEM EXCEÇÃO.
 
 Contexto:
 ${context}`.trim();
-            response = yield getLlmResponse(llmInput, systemMessageContent, "balanced", onChunk);
+            response = yield getLlmResponse(llmInput, systemMessageContent, "fast", onChunk);
         }
         else if (tool === "calculator_tool") {
             console.log("🧮 Executando calculator_tool...");
@@ -496,7 +489,7 @@ ${context}`.trim();
         return response;
     });
 }, {
-    name: "Generate Response",
+    name: "Generate Response - novo",
     run_type: "chain",
     metadata: {
         purpose: "Main orchestration with optimized model selection and streaming"

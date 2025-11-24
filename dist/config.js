@@ -24,7 +24,7 @@ exports.qdrantClient = new js_client_rest_1.QdrantClient({
 });
 exports.openAiEmbbeding = new openai_2.OpenAIEmbeddings({
     apiKey: exports.apiKeyOpenAi,
-    model: 'text-embedding-3-large',
+    model: 'text-embedding-3-small',
 });
 exports.fastModel = new openai_2.ChatOpenAI({
     model: "gpt-4o-mini",

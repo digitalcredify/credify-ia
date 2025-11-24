@@ -1,33 +1,35 @@
+"use strict";
 /**
- * @fileoverview 
+ * @fileoverview
  * recebe a requisição, valida os dados de entrada, decide se é com ou sem streaming e chama o operationAgentService
  * oq é streaming?: envia a resposta em chunks (pedaços de texto), igual ao chatGPT
  */
-
-import { Request, Response } from 'express';
-import { ENABLE_STREAMING } from '../config';
-import { operationAgentService } from '../service/operationAgentService';
-
-
-export const operationAgentController = async (req: Request, res: Response) => {
-
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.operationAgentController = void 0;
+const config_1 = require("../config");
+const operationAgentService_1 = require("../service/operationAgentService");
+const operationAgentController = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-
         const { pergunta, jsonData, startDate, endDate, startHour, endHour } = req.body;
-
         if (!pergunta || !jsonData || !startDate || !endDate) {
             return res.status(400).json({
                 error: "Campos obrigatórios: pergunta, jsonData, startDate, endDate"
             });
         }
-
         console.log(`📝 Pergunta recebida: "${pergunta}"`);
         console.log(`📅 Range: ${startDate} a ${endDate}`);
-        console.log(`🔄 Streaming: ${ENABLE_STREAMING ? 'HABILITADO' : 'DESABILITADO'}`);
-
+        console.log(`🔄 Streaming: ${config_1.ENABLE_STREAMING ? 'HABILITADO' : 'DESABILITADO'}`);
         // fluxo  com streaming.
-        if (ENABLE_STREAMING) {
-
+        if (config_1.ENABLE_STREAMING) {
             /**
              * configuranção de cabecalhos HTTP para um conexão Server-sant Events(SSE)
              * SSE: mantém a conexão aberta para que o servidor possa enviar múltipos eventos.
@@ -36,72 +38,51 @@ export const operationAgentController = async (req: Request, res: Response) => {
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
             res.setHeader('Access-Control-Allow-Origin', '*');
-
             // envia o cabeçalho IMEDIATAMENTE para o cliente.
             res.flushHeaders();
-
             let fullResponse = "";
-
             // callBack. será chamada pelo Service tpda vez que o llm gerar um novo chunk.
-            const chunk = (chunk: string) => {
-                fullResponse += chunk
+            const chunk = (chunk) => {
+                fullResponse += chunk;
                 const sseMessage = `data: ${JSON.stringify({ fullResponse })}\n\n`;
                 res.write(sseMessage);
-            }
-
+            };
             try {
-                await operationAgentService(pergunta, jsonData, startDate, endDate, startHour, endHour, chunk)
-
+                yield (0, operationAgentService_1.operationAgentService)(pergunta, jsonData, startDate, endDate, startHour, endHour, chunk);
                 res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`); // fim do streaming
-                res.end()
-
-            } catch (error) {
+                res.end();
+            }
+            catch (error) {
                 console.error("[Controller] Erro ao gerar resposta:", error);
-
-                const errorMessage = error instanceof Error ? error.message : "Erro desconhecido"
+                const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
                 res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
-                res.end()
-
+                res.end();
             }
         }
         else {
-
             try {
-                const response = await operationAgentService(pergunta, jsonData, startDate, endDate, startHour, endHour);
-
+                const response = yield (0, operationAgentService_1.operationAgentService)(pergunta, jsonData, startDate, endDate, startHour, endHour);
                 res.status(200).json({
                     success: true,
                     response: response
                 });
-
-
-            } catch (error) {
+            }
+            catch (error) {
                 console.error("[Controller] Erro na variável de streaming:", error);
-
-
                 if (!res.headersSent) {
                     res.status(500).json({
                         error: error instanceof Error ? error.message : "Erro interno do servidor"
                     });
                 }
-
             }
         }
-
-
-
-
-
-
-
-    } catch (error) {
-         if (!res.headersSent) {
+    }
+    catch (error) {
+        if (!res.headersSent) {
             res.status(500).json({
                 error: error instanceof Error ? error.message : "Erro interno do servidor"
             });
         }
-
     }
-}
-
-
+});
+exports.operationAgentController = operationAgentController;

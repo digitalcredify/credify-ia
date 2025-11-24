@@ -7,9 +7,10 @@
 
 import { traceable } from "langsmith/traceable";
 import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
-import { advancedModel, balancedModel, fastModel } from "./config";
-import { storeChatMessage, retrieverSessionHistory } from "./memory";
-import { specificQueryTool, aggregateTool, hybridSearchTool, calculatorTool } from "./tools";
+import { advancedModel, balancedModel, fastModel } from "../../config";
+import { storeChatMessage, retrieverSessionHistory } from "../../memory";
+import { specificQueryTool, aggregateTool, hybridSearchTool, calculatorTool } from "../../tools/history/tools";
+
 
 
 // essa função gera a resposta da pergunta

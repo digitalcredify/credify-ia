@@ -1,4 +1,4 @@
-import { qdrantClient, openAiEmbbeding, QDRANT_COLLECTION_NAME } from "./config";
+import { qdrantClient, openAiEmbbeding, QDRANT_COLLECTION_NAME } from "../../config";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { traceable } from "langsmith/traceable";
 import { evaluate } from 'mathjs';

@@ -19,9 +19,9 @@ const output_parsers_1 = require("@langchain/core/output_parsers");
 const prompts_1 = require("@langchain/core/prompts");
 const langchain_1 = require("langchain");
 const zod_1 = require("zod");
-const models_1 = require("../utils/models");
 const webAgent_1 = require("../agents/webAgent");
 const pdfAgent_1 = require("../agents/pdfAgent");
+const config_1 = require("../config");
 // define um molde para o json retornado pelo roteador.
 const routerSchema = 
 // define que deve ser um objeto
@@ -54,7 +54,7 @@ const runClassifyAgent = (pergunta) => __awaiter(void 0, void 0, void 0, functio
      * chain 1: o prompt é passado para o modelo
      * chain 2: a saida do modelo é convertida em um obsjon json
     */
-    const routerAgent = routerPromptTemplate.pipe(models_1.middleModel).pipe(new output_parsers_1.JsonOutputParser());
+    const routerAgent = routerPromptTemplate.pipe(config_1.fastModel).pipe(new output_parsers_1.JsonOutputParser());
     try {
         // invoka a resposta do llm com base na pergunta
         const result = yield routerAgent.invoke({ pergunta });

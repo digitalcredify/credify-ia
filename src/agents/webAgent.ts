@@ -1,5 +1,5 @@
 import { checkIfDataExists, ingestData } from "../scripts/ingest-data";
-import { generateResponse } from "../planning";
+import { generateResponse } from "../plannings/history/planning";
 import { isCurrentMonth } from "../utils/dateUtils";  
 
 

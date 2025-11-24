@@ -3,6 +3,8 @@ import { JsonOutputParser } from "@langchain/core/output_parsers";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { fastModel } from "../config";
 import { z } from "zod";
+import { traceable } from "langsmith/traceable";
+
 
 const routerSchema = z.object({
 
@@ -23,32 +25,30 @@ const routerPromptTemplate = PromptTemplate.fromTemplate(`
     
     Pergunta do Usuário: {pergunta}
     
-    
     Responda APENAS com JSON:
-    {{"routeName": "web_agent" | "pdf_agent", "reasoning": "..."}}
+    {{ "routerName": "web_agent" | "pdf_agent", "reasoning": "..." }}
 `
 )
 
-export const runRouterAgent = async (pergunta: string) => {
+export const runRouterAgent = traceable(
+    async function runRouterAgent(pergunta: string) {
+        const routerAgent = routerPromptTemplate.pipe(fastModel).pipe(new JsonOutputParser)
 
-    const routerAgent = routerPromptTemplate.pipe(fastModel).pipe(new JsonOutputParser)
+        try {
 
-    try {
+            const result = await routerAgent.invoke({ pergunta })
+            const validatedResult = routerSchema.parse(result)
 
-        const result = await routerAgent.invoke({ pergunta })
-        const validatedResult = routerSchema.parse(result)
+            console.log(`Roteador: Decisão = ${validatedResult.routerName}. Razão = ${validatedResult.reasoning}`);
 
-        console.log(`Roteador: Decisão = ${validatedResult.routerName}. Razão = ${validatedResult.reasoning}`);
+            return validatedResult
+        } catch (error) {
+            console.error("Erro ao parsear ou validar a rota:", error);
 
-        return validatedResult
+            return { routerName: "web_agent", reasoning: "Tivemos um erro inesperado, tente novamente mais tarde." };
 
-
-    } catch (error) {
-        console.error("Erro ao parsear ou validar a rota:", error);
-
-        return { routerName: "web_agent", reasoning: "Tivemos um erro inesperado, tente novamente mais tarde." };
+        }
 
     }
 
-
-}
+)

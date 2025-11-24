@@ -10,5 +10,5 @@ dotenv_1.default.config();
 const apiKey = process.env.API_KEY;
 exports.openAiEmbbeding = new openai_1.OpenAIEmbeddings({
     apiKey: apiKey,
-    model: 'text-embedding-3-large',
+    model: 'text-embedding-3-small',
 });

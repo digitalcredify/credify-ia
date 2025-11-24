@@ -30,7 +30,6 @@ const runWebAgent = (pergunta, jsonData, targetMonth, onChunk) => __awaiter(void
             if (!dataExists) {
                 console.log(`[Web Agent] Iniciando ingestão para ${targetMonth}...`);
                 yield (0, ingest_data_1.ingestData)(jsonData, targetMonth);
-                // createVectorIndex não é mais necessário
             }
             else {
                 console.log(`[Web Agent] Dados para ${targetMonth} já existem.`);

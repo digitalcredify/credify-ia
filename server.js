@@ -19,12 +19,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const agentRoute_1 = __importDefault(require("./src/routes/agentRoute"));
+const operationAgentRoute_1 = __importDefault(require("./src/routes/operationAgentRoute"));
 const memory_1 = require("./src/memory");
 const app = (0, express_1.default)();
-const PORT = 3090;
+const PORT = 3080;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 app.use('/api', agentRoute_1.default);
+app.use('/api', operationAgentRoute_1.default);
 function startServer() {
     return __awaiter(this, void 0, void 0, function* () {
         try {

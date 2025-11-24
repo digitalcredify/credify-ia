@@ -6,7 +6,8 @@
     "dev": "nodemon server.ts",
     "compile": "npx tsc",
     "start": "node ./dist/server.js",
-    "ingest": "npx ts-node src/scripts/ingest.ts"
+    "ingest": "npx ts-node src/scripts/ingest.ts",
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
@@ -49,11 +50,14 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.9.1",
     "@types/pdfkit": "^0.17.3",
     "@types/puppeteer": "^5.4.7",
     "@types/sqlite3": "^3.1.11",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
