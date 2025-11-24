@@ -1,9 +1,3 @@
-/**
- * @fileoverview 
- * este arquivo atua como um roteador inteligente para o Operation Agent
- * Web Agent: acionado quando é feita perguntas sobre dados operacionais
- * PDF Agent: acionado quando o usuário pede explicitamente por um pdf
- */
 
 import { runRouterAgent } from "../agents/routerAgent";
 import { runPdfAgent } from "../agents/pdfAgent";
@@ -26,7 +20,6 @@ export const operationAgentService = async (
             console.log(`[Operation Agent Service] Horas: ${startHour}h a ${endHour}h`);
         }
 
-        // Classifica a intenção do usuário
         const routeDecision = await runRouterAgent(pergunta);
 
         switch (routeDecision.routerName) {
@@ -36,7 +29,6 @@ export const operationAgentService = async (
 
             case "pdf_agent":
                 console.log("[Operation Agent Service] Roteando para PDF Agent");
-                // Usa uma sessionId baseada no range de datas para o PDF Agent
                 const sessionId = `operation_${startDate}_${endDate}`;
                 return await runPdfAgent(sessionId, pergunta);
 

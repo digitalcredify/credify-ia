@@ -1,8 +1,3 @@
-/**
- * @fileoverview 
- * Ferramentas (tools) específicas para consulta de dados operacionais no Qdrant
- * Similar ao tools.ts, mas adaptado para a estrutura de dados operacionais
- */
 
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { traceable } from "langsmith/traceable";
@@ -15,9 +10,7 @@ const vectorStore = new QdrantVectorStore(openAiEmbbeding, {
     collectionName: QDRANT_OPERATION_COLLECTION_NAME,
 });
 
-/**
- * Cria filtro para range de datas e opcionalmente horas
- */
+
 function createRangeFilter(startDate: string, endDate: string, startHour?: any, endHour?: any) {
     const filters: any = {
         must: [
@@ -25,43 +18,41 @@ function createRangeFilter(startDate: string, endDate: string, startHour?: any, 
             { key: "metadata.endDate", match: { value: endDate } }
         ]
     };
-    
-    // Se startHour e endHour forem fornecidos, adiciona ao filtro
+
     if (startHour !== undefined && endHour !== undefined) {
-        filters.must.push({ key: "metadata.hour", range: { gte: startHour, lte: endHour } });
+        filters.must.push({ key: "metadata.startHour", range: { gte: startHour, lte: endHour } });
+        filters.must.push({ key: "metadata.endHour", range: { gte: startHour, lte: endHour } });
     }
-    
+
     return filters;
 }
 
-/**
- * Ferramenta de busca específica para dados operacionais
- */
+
 export const operationSpecificQueryTool = traceable(
     async function operationSpecificQueryTool(input: { query: string, filters: any }) {
         console.log("🔍 Operation Specific Query Tool (Qdrant):", input);
-        
+
         try {
             const startDate = input.filters?.startDate || input.filters;
             const endDate = input.filters?.endDate || input.filters;
             const startHour = input.filters?.startHour;
             const endHour = input.filters?.endHour;
             const qdrantFilter = createRangeFilter(startDate, endDate, startHour, endHour);
-            
+
             const retriever = vectorStore.asRetriever({
                 k: 50,
                 filter: qdrantFilter
             });
 
             const results = await retriever._getRelevantDocuments(input.query);
-            
+
             console.log(`🔍 Operation Specific Query: ${results.length} documentos encontrados`);
-            
-            return results.map(doc => ({ 
-                document: doc, 
-                score: null 
+
+            return results.map(doc => ({
+                document: doc,
+                score: null
             }));
-            
+
         } catch (error: any) {
             console.error("❌ Erro no Operation Specific Query Tool:", error.message);
             return [];
@@ -70,9 +61,7 @@ export const operationSpecificQueryTool = traceable(
     { name: "Operation Specific Query Tool (Qdrant)", run_type: "retriever" }
 );
 
-/**
- * Ferramenta de agregação para dados operacionais
- */
+
 export const operationAggregateTool = traceable(
     async function operationAggregateTool(input: { query: string, filters: any, groupBy: string }) {
         console.log("📊 Operation Aggregate Tool (Qdrant):", input);
@@ -83,18 +72,18 @@ export const operationAggregateTool = traceable(
             const startHour = input.filters?.startHour;
             const endHour = input.filters?.endHour;
             const qdrantFilter = createRangeFilter(startDate, endDate, startHour, endHour);
-            
+
             const retriever = vectorStore.asRetriever({
                 k: 500,
                 filter: qdrantFilter
             });
-            
+
             const results = await retriever._getRelevantDocuments(input.query);
-            
+
             console.log(`📊 Operation Aggregate Tool: ${results.length} documentos recuperados para agregação`);
 
             const grouped: { [key: string]: any } = {};
-            
+
             for (const doc of results) {
                 const data = doc.metadata;
 
@@ -143,7 +132,6 @@ export const operationAggregateTool = traceable(
                 grouped[groupKey].count += 1;
             }
 
-            // Calcula a média do tempo de execução
             for (const key in grouped) {
                 if (grouped[key].count > 0) {
                     grouped[key].averageExecutionTime = grouped[key].averageExecutionTime / grouped[key].count;
@@ -163,9 +151,7 @@ export const operationAggregateTool = traceable(
     { name: "Operation Aggregate Tool (Qdrant)", run_type: "retriever" }
 );
 
-/**
- * Ferramenta de busca híbrida para dados operacionais
- */
+
 export const operationHybridSearchTool = traceable(
     async function operationHybridSearchTool(input: { query: string, filters: any }) {
         console.log("🔎 Operation Hybrid Search Tool (Qdrant):", input);
@@ -199,9 +185,7 @@ export const operationHybridSearchTool = traceable(
     { name: "Operation Hybrid Search Tool (Qdrant)", run_type: "retriever" }
 );
 
-/**
- * Ferramenta de calculadora (reutilizada do tools.ts)
- */
+
 export const operationCalculatorTool = traceable(
     async function operationCalculatorTool(input: { expression: string }) {
         console.log("🧮 Operation Calculator Tool:", input);
@@ -219,10 +203,7 @@ export const operationCalculatorTool = traceable(
     { name: "Operation Calculator Tool", run_type: "tool" }
 );
 
-/**
- * Ferramenta para análise de performance
- * Calcula métricas de performance baseadas nos dados operacionais
- */
+
 export const operationPerformanceAnalysisTool = traceable(
     async function operationPerformanceAnalysisTool(input: { filters: any }) {
         console.log("📈 Operation Performance Analysis Tool:", input);

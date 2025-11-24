@@ -1,8 +1,3 @@
-/**
- * @fileoverview 
- * Sistema de planejamento e geração de respostas para dados operacionais
- * Similar ao planning.ts, mas adaptado para a estrutura de dados operacionais
- */
 
 import { traceable } from "langsmith/traceable";
 import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
@@ -57,9 +52,7 @@ async function generateResponseOpenAI(
     }
 }
 
-/**
- * Seleciona e executa ferramentas baseado na pergunta do usuário
- */
+
 const selectAndExecuteTools = traceable(
     async function selectAndExecuteTools(
         pergunta: string,
@@ -77,10 +70,8 @@ const selectAndExecuteTools = traceable(
         }
         const results: any[] = [];
 
-        // Análise da pergunta para decidir quais ferramentas usar
         const perguntaLower = pergunta.toLowerCase();
 
-        // Se a pergunta menciona agregação, ranking, top, total, etc.
         if (
             perguntaLower.includes("total") ||
             perguntaLower.includes("ranking") ||
@@ -94,7 +85,7 @@ const selectAndExecuteTools = traceable(
         ) {
             console.log("[Operation Planning] Usando Aggregate Tool");
 
-            let groupBy = "product"; // padrão
+            let groupBy = "product"; 
 
             if (perguntaLower.includes("produto")) groupBy = "product";
             else if (perguntaLower.includes("empresa")) groupBy = "company";
@@ -115,7 +106,6 @@ const selectAndExecuteTools = traceable(
             });
         }
 
-        // Se a pergunta menciona performance, taxa de sucesso, falhas, etc.
         if (
             perguntaLower.includes("performance") ||
             perguntaLower.includes("taxa de sucesso") ||
@@ -133,7 +123,6 @@ const selectAndExecuteTools = traceable(
             });
         }
 
-        // Se a pergunta menciona cálculo
         if (
             perguntaLower.includes("calcul") ||
             perguntaLower.includes("soma") ||
@@ -142,10 +131,8 @@ const selectAndExecuteTools = traceable(
             perguntaLower.includes("divide")
         ) {
             console.log("[Operation Planning] Calculator Tool pode ser necessário");
-            // A calculadora será usada conforme necessário durante a geração da resposta
         }
 
-        // Busca específica (sempre executada como fallback)
         if (results.length === 0 || perguntaLower.includes("qual") || perguntaLower.includes("quais")) {
             console.log("[Operation Planning] Usando Specific Query Tool");
 
@@ -166,9 +153,7 @@ const selectAndExecuteTools = traceable(
     { name: "Select and Execute Operation Tools", run_type: "chain" }
 );
 
-/**
- * Gera a resposta final baseada nos resultados das ferramentas
- */
+
 export const generateOperationResponse = traceable(
     async function generateOperationResponse(
         startDate: string,
@@ -181,10 +166,8 @@ export const generateOperationResponse = traceable(
         try {
             console.log("[Operation Planning] Gerando resposta...");
 
-            // Executa as ferramentas
             const toolResults = await selectAndExecuteTools(pergunta, startDate, endDate, startHour, endHour);
 
-            // Prepara o contexto com os resultados das ferramentas
             let context = `Período analisado: ${startDate} a ${endDate}`;
             if (startHour !== undefined && endHour !== undefined) {
                 context += ` (${startHour}h - ${endHour}h)`;
@@ -207,7 +190,6 @@ export const generateOperationResponse = traceable(
                 }
             }
 
-            // Cria o prompt do sistema
             const systemPrompt = `Você é um assistente especializado em análise de dados operacionais da Credify.
 
 Sua função é responder perguntas sobre métricas de performance, execuções, sucessos, falhas, produtos, aplicações, usuários e empresas.
@@ -230,7 +212,6 @@ ${context}`;
                 { role: "user", content: pergunta }
             ];
 
-            // Gera a resposta
             const response = await generateResponseOpenAI(messages, "advanced", onChunk);
 
             console.log("[Operation Planning] Resposta gerada com sucesso");

@@ -1,12 +1,4 @@
-/**
- * @fileoverview 
- * este arquivo é responsável pela ingestão de dados operacionais no Qdrant.
- * Diferente do ingest-data.ts que trabalha com mês, este trabalha com ranges de datas (startDate, endDate)
- * e também com ranges de horas (startHour, endHour)
- * 1- Transforma os dados provenientes de um JSON em embeddings (vetores semânticos)
- * 2- Armazena esses embeddings no Qdrant Cloud com metadados de range de datas e horas
- * 3- Verifica se um range já está contido em ranges previamente ingeridos
- */
+
 
 import { traceable } from "langsmith/traceable";
 import { Document } from "@langchain/core/documents";
@@ -15,21 +7,11 @@ import { qdrantClient, openAiEmbbeding } from "../../config";
 
 export const QDRANT_OPERATION_COLLECTION_NAME = "credify_operation_collection";
 
-/**
- * Converte string de data para objeto Date
- */
 function parseDate(dateString: string): Date {
     return new Date(dateString);
 }
 
-/**
- * Verifica se um range (A) está completamente contido em outro range (B)
- * @param requestStart - Data inicial do range solicitado
- * @param requestEnd - Data final do range solicitado
- * @param existingStart - Data inicial do range existente
- * @param existingEnd - Data final do range existente
- * @returns true se o range solicitado está contido no range existente
- */
+
 export function isRangeContained(
     requestStart: Date,
     requestEnd: Date,
@@ -39,15 +21,7 @@ export function isRangeContained(
     return requestStart >= existingStart && requestEnd <= existingEnd;
 }
 
-/**
- * Verifica se já existe um range no Qdrant que contenha o range solicitado
- * Agora verifica tanto o range de datas quanto o range de horas
- * @param startDate - Data inicial solicitada
- * @param endDate - Data final solicitada
- * @param startHour - Hora inicial solicitada
- * @param endHour - Hora final solicitada
- * @returns true se o range já está coberto, false caso contrário
- */
+
 export const checkIfRangeExists = traceable(
     async function checkIfRangeExists(
         startDate: string, 
@@ -63,7 +37,6 @@ export const checkIfRangeExists = traceable(
             const requestStartHour = parseInt(startHour);
             const requestEndHour = parseInt(endHour);
 
-            // Busca todos os pontos da coleção para verificar ranges existentes
             const scrollResult = await qdrantClient.scroll(QDRANT_OPERATION_COLLECTION_NAME, {
                 limit: 100,
                 with_payload: true,
@@ -75,7 +48,6 @@ export const checkIfRangeExists = traceable(
                 return false;
             }
 
-            // Extrai ranges únicos dos metadados (incluindo horas)
             const existingRanges = new Set<string>();
             for (const point of scrollResult.points) {
                 const payload = point.payload as any;
@@ -90,7 +62,6 @@ export const checkIfRangeExists = traceable(
 
             console.log(`[Operation Ingest] Encontrados ${existingRanges.size} ranges únicos na coleção.`);
 
-            // Verifica se algum range existente contém o range solicitado
             for (const rangeKey of existingRanges) {
                 const [existingStartStr, existingEndStr, existingStartHourStr, existingEndHourStr] = rangeKey.split('|');
                 const existingStart = parseDate(existingStartStr);
@@ -98,13 +69,10 @@ export const checkIfRangeExists = traceable(
                 const existingStartHour = parseInt(existingStartHourStr);
                 const existingEndHour = parseInt(existingEndHourStr);
 
-                // Verifica se o range de datas está contido
                 const dateRangeContained = isRangeContained(requestStart, requestEnd, existingStart, existingEnd);
                 
-                // Verifica se o range de horas está contido
                 const hourRangeContained = requestStartHour >= existingStartHour && requestEndHour <= existingEndHour;
 
-                // Só retorna true se AMBOS os ranges (data E hora) estiverem contidos
                 if (dateRangeContained && hourRangeContained) {
                     console.log(`[Operation Ingest] ✅ Range solicitado está contido em: ${existingStartStr} a ${existingEndStr} (${existingStartHourStr}h - ${existingEndHourStr}h)`);
                     return true;
@@ -126,9 +94,7 @@ export const checkIfRangeExists = traceable(
     { name: "Check If Range Exists", run_type: "retriever" }
 );
 
-/**
- * Garante que a coleção do Qdrant existe
- */
+
 async function ensureOperationCollectionExists() {
     try {
         const collectionInfo = await qdrantClient.getCollection(QDRANT_OPERATION_COLLECTION_NAME);
@@ -147,7 +113,6 @@ async function ensureOperationCollectionExists() {
                 });
                 console.log(`[Qdrant] ✅ Coleção criada!`);
                 
-                // Cria índices para os campos de data e hora
                 await qdrantClient.createPayloadIndex(QDRANT_OPERATION_COLLECTION_NAME, {
                     field_name: "metadata.startDate",
                     field_schema: "keyword"
@@ -179,13 +144,10 @@ async function ensureOperationCollectionExists() {
     }
 }
 
-/**
- * Processa os dados operacionais e cria documentos para ingestão
- */
+
 function processOperationData(jsonData: any, startDate: string, endDate: string, startHour: string, endHour: string): Document[] {
     const documents: Document[] = [];
 
-    // Processa produtos
     if (jsonData.datasets?.products) {
         for (const product of jsonData.datasets.products) {
             const content = `
@@ -216,7 +178,6 @@ Tempo médio de execução: ${product.averageExecutionTime}ms
         }
     }
 
-    // Processa métricas horárias
     if (jsonData.datasets?.hourlyMetrics) {
         for (const hourly of jsonData.datasets.hourlyMetrics) {
             const content = `
@@ -245,7 +206,6 @@ Tempo médio de execução: ${hourly.averageExecutionTime}ms
         }
     }
 
-    // Processa aplicações de origem
     if (jsonData.datasets?.applicationsOrigin) {
         for (const app of jsonData.datasets.applicationsOrigin) {
             const content = `
@@ -276,7 +236,6 @@ Tempo médio de execução: ${app.averageExecutionTime}ms
         }
     }
 
-    // Processa lista de usuários
     if (jsonData.datasets?.usersList) {
         for (const user of jsonData.datasets.usersList) {
             const content = `
@@ -307,7 +266,6 @@ Tempo médio de execução: ${user.averageExecutionTime}ms
         }
     }
 
-    // Processa métricas diárias
     if (jsonData.datasets?.dailyMetrics) {
         for (const daily of jsonData.datasets.dailyMetrics) {
             const content = `
@@ -338,7 +296,6 @@ Total retornado: ${daily.fields?.totalReturned || 0}
         }
     }
 
-    // Processa breakdown de empresas
     if (jsonData.datasets?.companiesBreakdown) {
         for (const company of jsonData.datasets.companiesBreakdown) {
             const content = `
@@ -370,7 +327,6 @@ Totais da empresa:
                 }
             }));
 
-            // Processa usuários dentro de cada empresa
             if (company.users) {
                 for (const user of company.users) {
                     const userContent = `
@@ -410,9 +366,7 @@ Tempo médio de execução: ${user.averageExecutionTime}ms
     return documents;
 }
 
-/**
- * Ingere dados operacionais no Qdrant
- */
+
 export const ingestOperationData = traceable(
     async function ingestOperationData(
         jsonData: any, 

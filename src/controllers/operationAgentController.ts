@@ -28,21 +28,16 @@ export const operationAgentController = async (req: Request, res: Response) => {
         // fluxo  com streaming.
         if (ENABLE_STREAMING) {
 
-            /**
-             * configuranção de cabecalhos HTTP para um conexão Server-sant Events(SSE)
-             * SSE: mantém a conexão aberta para que o servidor possa enviar múltipos eventos.
-            */
+          
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
             res.setHeader('Access-Control-Allow-Origin', '*');
 
-            // envia o cabeçalho IMEDIATAMENTE para o cliente.
             res.flushHeaders();
 
             let fullResponse = "";
 
-            // callBack. será chamada pelo Service tpda vez que o llm gerar um novo chunk.
             const chunk = (chunk: string) => {
                 fullResponse += chunk
                 const sseMessage = `data: ${JSON.stringify({ fullResponse })}\n\n`;
