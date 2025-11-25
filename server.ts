@@ -8,7 +8,7 @@ import cors from 'cors';
 import agent from './src/routes/agentRoute';
 import operationAgent from './src/routes/operationAgentRoute';
 import { clearAllChatHistory } from './src/memory';
-import juridicoAgent from './src/routes/juridicoAgentRoute';
+import juridicoAgentRoute from './src/routes/juridicoAgentRoute';
 
 
 const app = express();
@@ -19,7 +19,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/api', agent);
 app.use('/api', operationAgent);
-app.use('/api', juridicoAgent);
+app.use('/api', juridicoAgentRoute);
 
 async function startServer() {
     try {
