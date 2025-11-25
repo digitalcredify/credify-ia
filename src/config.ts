@@ -21,12 +21,22 @@ export const apiKeyOpenAi = process.env.API_KEY;
 export const qdrantUrl = process.env.QDRANT_URL;
 export const qdrantApiKey = process.env.QDRANT_API_KEY;
 
+export const openAiEmbbeding = new OpenAIEmbeddings({
+    apiKey: apiKeyOpenAi,
+    model: 'text-embedding-3-small',
+});
+
+
 export const openAIClient = new OpenAI({ apiKey: apiKeyOpenAi });
 
 export const qdrantClient = new QdrantClient({
     url: qdrantUrl,
     apiKey: qdrantApiKey,
 });
+
+
+
+
 
 // verifica se a collection ja existe
 export async function collectionExists(collectionName:string){
@@ -75,10 +85,6 @@ export const addDocuments = traceable(
 )
 
 
-export const openAiEmbbeding = new OpenAIEmbeddings({
-    apiKey: apiKeyOpenAi,
-    model: 'text-embedding-3-small',
-});
 
 
 export const fastModel = new ChatOpenAI({
