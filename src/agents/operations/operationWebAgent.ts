@@ -1,24 +1,9 @@
-/**
- * @fileoverview 
- * Operation Web Agent - Agente especializado em responder perguntas sobre dados operacionais
- * Similar ao webAgent.ts, mas adaptado para trabalhar com ranges de datas
- */
+
 
 import { generateOperationResponse } from "../../plannings/operation/operationPlanning";
 import { checkIfRangeExists, ingestOperationData } from "../../scripts/operations/ingest-operation-data";
 
 
-
-/**
- * Executa o Operation Web Agent
- * @param pergunta - Pergunta do usuário
- * @param jsonData - Dados operacionais do dashboard
- * @param startDate - Data inicial do range
- * @param endDate - Data final do range
- * @param startHour - Hora inicial do filtro (opcional)
- * @param endHour - Hora final do filtro (opcional)
- * @param onChunk - Callback para streaming de resposta
- */
 export const runOperationWebAgent = async (
     pergunta: string,
     jsonData: any,

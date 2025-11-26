@@ -1,46 +1,42 @@
-/**
- * @fileoverview
- * Serviço para o agente jurídico
- * Orquestra a execução do agente jurídico com validações
- */
 
+import { runRouterAgent } from "../agents/routerAgent";
 import { runJuridicoAgent } from "../agents/juridicoAgent";
+import { runPdfAgent } from "../agents/pdfAgent";
+import { runJuridicoWebAgent } from "../agents/juridico/runJuridicoWebAgent";
 
-/**
- * Serviço principal do agente jurídico
- * @param pergunta - Pergunta do usuário sobre processos
- * @param onChunk - Callback opcional para streaming
- * @returns Resposta do agente
- */
-const juridicoAgentService = async (
-    pergunta: string,
+
+export const juridicoAgentService = async (
+    pergunta:string,
+    document:string,
+    name:string,
     onChunk?: (chunk: string) => void
-): Promise<string> => {
+) => {
     try {
-        console.log("[Juridico Service] Processando pergunta:", pergunta);
+        console.log("[Juridico Service] Iniciando processamento...")
 
-        // Validações básicas
-        if (!pergunta || pergunta.trim().length === 0) {
-            throw new Error("Pergunta não pode estar vazia");
-        }
-
-        // Executar o agente jurídico
-        const response = await runJuridicoAgent(pergunta, onChunk);
-
-        if (!response) {
-            throw new Error("Nenhuma resposta foi gerada");
-        }
-
-        console.log("[Juridico Service] ✅ Serviço concluído com sucesso");
-
-        return response;
-
-    } catch (error) {
-        console.error("[Juridico Service] ❌ Erro no serviço:", error);
         
-        const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-        throw new Error(`Erro ao processar pergunta jurídica: ${errorMessage}`);
-    }
-};
+        const routerDecision = await runRouterAgent(pergunta)
 
-export default juridicoAgentService;
+        switch(routerDecision.routerName){
+            case 'web_agent':
+                console.log("[Juridico Service] Roteando para Jurídico Web Agent")
+
+                return await runJuridicoWebAgent(pergunta,document, name,onChunk)
+            
+            case 'pdf_agent':
+                console.log('[Juridico Service] Roteando para Jurídico sPDF Agent');
+                const sessionId = `juridico_${Date.now()}`;
+                return await runPdfAgent(sessionId, pergunta);
+            
+            default:
+                console.log("[Juridico Service] Rota não reconhecida, usando Jurídico Web Agent como fallback")
+                return await runJuridicoWebAgent(pergunta,name,document, onChunk)
+        }
+
+        
+    } catch (error) {
+        console.error("[Juridico Service] Erro:", error);
+        throw error;
+        
+    }
+}

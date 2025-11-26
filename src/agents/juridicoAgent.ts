@@ -1,20 +1,13 @@
-/**
- * @fileoverview
- * Agente especializado em consultas jurídicas
- * Utiliza as 10 tools para responder perguntas sobre processos
- */
+
 
 import { BaseMessage, HumanMessage } from "langchain";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { compareProcesses, getProcessDetails, getProcessesByStatus, getProcessesByTribunal, getProcessesByValueRange, getProcessesSummary, getProcessesWithAdvogado, searchProcessesByArea, searchProcessesByDecision, searchProcessesByParty } from "../tools/juridico/tools";
+import { compareProcesses, getProcessDetails, getProcessesByStatus, getProcessesByTribunal, getProcessesByValueRange, getProcessesSummary, getProcessesWithAdvogado, searchProcessesByArea, searchProcessesByDecision, searchProcessesByParty } from "../tools/juridico/Juridicotools";
 import { fastModel } from "../config";
 
 
-// ============================================
-// DEFINIÇÃO DAS TOOLS COMO LANGCHAIN TOOLS
-// ============================================
 
 const searchProcessesByPartyTool = tool(
     async (input) => {
@@ -201,9 +194,7 @@ const compareProcessesTool = tool(
     }
 );
 
-// ============================================
-// PROMPT DO AGENTE
-// ============================================
+
 
 const JURIDICO_AGENT_PROMPT = `Você é um assistente jurídico especializado em análise de processos.
 
@@ -228,18 +219,14 @@ Quando o usuário fizer uma pergunta:
 Sempre seja preciso e cite números de processos, valores e datas quando relevante.
 Se não conseguir encontrar informações, seja honesto sobre isso.`;
 
-// ============================================
-// CRIAR O AGENTE
-// ============================================
+
 
 export const runJuridicoAgent = async (
     pergunta: string,
     onChunk?: (chunk: string) => void
 ) => {
-    console.log("[Juridico Agent] Iniciando com pergunta:", pergunta);
 
     try {
-        // Criar o agente com as tools
         const tools = [
             searchProcessesByPartyTool,
             getProcessDetailsTool,
@@ -259,21 +246,17 @@ export const runJuridicoAgent = async (
             prompt: JURIDICO_AGENT_PROMPT
         });
 
-        // Executar o agente
         const input = {
             messages: [new HumanMessage(pergunta)]
         };
 
         let fullResponse = "";
 
-        // Se houver callback de chunk, usar streaming
        if (onChunk) {
             const stream = await agent.stream(input);
             
             for await (const chunk of stream) {
-                // CORREÇÃO 1: Verificação segura de tipos no streaming
                 if (chunk.agent?.messages && Array.isArray(chunk.agent.messages)) {
-                    // Forçamos o cast para BaseMessage[] para o TS entender que é um array
                     const messages = chunk.agent.messages as BaseMessage[];
                     const firstMessage = messages[0];
                     
@@ -285,16 +268,13 @@ export const runJuridicoAgent = async (
                 }
             }
         } else {
-            // Sem streaming
             const result = await agent.invoke(input);
             
-            // CORREÇÃO 2: Verificação de tipo no content final
             const lastMessage = result.messages[result.messages.length - 1];
             
             if (typeof lastMessage.content === "string") {
                 fullResponse = lastMessage.content;
             } else {
-                // Caso raro onde o conteúdo volta como array (multimodal), convertemos para string
                 fullResponse = JSON.stringify(lastMessage.content);
             }
         }

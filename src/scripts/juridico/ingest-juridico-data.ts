@@ -10,7 +10,7 @@ const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection'
 
 
 export const ingestJuridicoData = traceable(
-    async function ingestJuridicoData(fullJson: any) {
+    async function ingestJuridicoData(fullJson: any, document: string, name: string) {
         console.log("⚖️ [Juridico Ingest] Iniciando ingestão...");
 
         const sessionId = uuidv4();
@@ -25,14 +25,61 @@ export const ingestJuridicoData = traceable(
                 field_schema: "keyword"
             });
             await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
-                field_name: "metadata.targetDocument",
+                field_name: "metadata.document",
                 field_schema: "keyword"
             });
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.name",
+                field_schema: "keyword"
+            });
+        } else {
+            console.log(`[Juridico Ingest] 🧹 Verificando e limpando dados antigos para o documento: ${document}...`);
+
+            try {
+
+                const searchResult = await qdrantClient.count(QDRANT_JURIDICO_COLLECTION_NAME, {
+                    filter: {
+                        must: [
+                            {
+                                key: "metadata.document",
+                                match: {
+                                    value: document
+                                }
+                            }
+                        ]
+                    }
+                });
+
+                if (searchResult.count > 0) {
+                    console.log(`[Juridico Ingest] 🧹 Deletando ${searchResult.count} registros antigos...`);
+
+                    await qdrantClient.delete(QDRANT_JURIDICO_COLLECTION_NAME, {
+                        filter: {
+                            must: [
+                                {
+                                    key: "metadata.document",
+                                    match: {
+                                        value: document
+                                    }
+                                }
+                            ]
+                        },
+                        wait: true 
+                    });
+
+                    console.log(`[Juridico Ingest] ✅ Limpeza concluída com sucesso.`);
+                } else {
+                    console.log(`[Juridico Ingest] ⏩ Nenhum dado antigo para limpar. Prosseguindo...`);
+                }
+
+            } catch (error) {
+                console.error(`[Juridico Ingest] ⚠️ Erro ao tentar limpar dados antigos:`, error);
+
+            }
         }
 
+
         const dadosCadastrais = fullJson?.RESPOSTA?.DADOSCADASTRAIS?.[0] || {};
-        const targetName = dadosCadastrais.NOMERAZAO || "DESCONHECIDO";
-        const targetDoc = dadosCadastrais.CPFCNPJ || "NA";
 
         const rawData = fullJson?.RESPOSTA?.DATA || {};
 
@@ -59,7 +106,7 @@ export const ingestJuridicoData = traceable(
         };
 
 
-        
+
         const getMainParties = (partesObj: any): string => {
             const partesArray = registroObjectToArray(partesObj);
             if (partesArray.length === 0) return "N/A";
@@ -140,8 +187,8 @@ export const ingestJuridicoData = traceable(
         const documents: Document[] = processes.map((proc: any) => {
             const pageContent = `
                     DADOS DO ALVO:
-                    - Nome: ${targetName}
-                    - Documento: ${targetDoc}
+                    - Nome: ${name}
+                    - Documento: ${document}
 
                     DETALHES DO PROCESSO:
                         - Número do CNJ: ${proc.NUMEROPROCESSOUNICO || "N/A"} 
@@ -168,8 +215,8 @@ export const ingestJuridicoData = traceable(
                 pageContent: pageContent,
                 metadata: {
                     sessionId: sessionId,
-                    targetName: targetName,
-                    targetDocument: targetDoc,
+                    name: name,
+                    document: document,
                     processNumber: proc.NUMEROPROCESSOUNICO,
                     area: proc.AREA,
                     value: parseFloat(proc.VALORCAUSA?.VALOR || "0"),
@@ -182,7 +229,7 @@ export const ingestJuridicoData = traceable(
             });
         });
 
-        console.log(`[Juridico Ingest] Inserindo ${documents.length} documentos vinculados a ${targetName}...`);
+        console.log(`[Juridico Ingest] Inserindo ${documents.length} documentos vinculados a ${name}...`);
 
         const vectorStore = new QdrantVectorStore(openAiEmbbeding, {
             client: qdrantClient,
@@ -200,7 +247,7 @@ export const ingestJuridicoData = traceable(
                     index,
                     tamanho,
                     processNumber: doc.metadata?.processNumber || "N/A",
-                    pageContent: texto,    
+                    pageContent: texto,
                     preview: texto.substring(0, 200)
                 };
             }

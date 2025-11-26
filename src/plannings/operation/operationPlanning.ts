@@ -178,10 +178,12 @@ export const generateOperationResponse = traceable(
                 if (result.tool === "aggregate") {
                     context += "Dados agregados:\n";
                     context += JSON.stringify(result.data, null, 2) + "\n\n";
-                } else if (result.tool === "performance") {
+                } 
+                else if (result.tool === "performance") {
                     context += "Análise de performance:\n";
                     context += JSON.stringify(result.data, null, 2) + "\n\n";
-                } else if (result.tool === "specific") {
+                } 
+                else if (result.tool === "specific") {
                     context += "Dados específicos encontrados:\n";
                     const docs = result.data.slice(0, 10); // Limita a 10 documentos
                     for (const doc of docs) {

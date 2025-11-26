@@ -5,99 +5,88 @@
  */
 
 import { Request, Response } from 'express';
-import juridicoAgentService from '../service/juridicoAgentService';
+
 import { ENABLE_STREAMING } from '../config';
 import { ingestJuridicoData } from '../scripts/juridico/ingest-juridico-data';
+import { juridicoAgentService } from '../service/juridicoAgentService';
 
-/**
- * Controller para processar perguntas jurídicas
- * POST /juridico-chat
- */
+
 export const juridicoAgentController = async (req: Request, res: Response) => {
     try {
-        const { pergunta } = req.body;
+        const { pergunta, document, name } = req.body;
 
-        // Validações
-        if (!pergunta) {
+        if (!pergunta || !document || !name) {
             return res.status(400).json({
-                error: "Campo obrigatório: pergunta"
+                error: "Campos obrigatórios: pergunta, documento e nome"
             });
         }
 
         console.log(`📝 [Juridico Controller] Pergunta recebida: "${pergunta}"`);
+        console.log(`📄 [Juridico Controller] Documento: ${document}`);
+        console.log(`🏷️ [Juridico Controller] Nome: ${name}`);
         console.log(`🔄 [Juridico Controller] Streaming: ${ENABLE_STREAMING ? 'HABILITADO' : 'DESABILITADO'}`);
 
-        // Fluxo com streaming
+
+        // fluxo com streaming
         if (ENABLE_STREAMING) {
-            /**
-             * Configuração de cabeçalhos HTTP para Server-Sent Events (SSE)
-             * SSE: mantém a conexão aberta para enviar múltiplos eventos
-             */
+
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
             res.setHeader('Access-Control-Allow-Origin', '*');
-            
-            // Envia o cabeçalho IMEDIATAMENTE para o cliente
-            res.flushHeaders();
+
+            res.flushHeaders()
 
             let fullResponse = "";
 
-            /**
-             * Callback chamado pelo serviço cada vez que há um novo chunk
-             */
-            const onChunk = (chunk: string) => {
-                fullResponse += chunk;
-
-                // Formata para o padrão SSE
+            const chunk = (chunk: string) => {
+                fullResponse += chunk
                 const sseMessage = `data: ${JSON.stringify({ fullResponse })}\n\n`;
-
-                // Envia o evento SSE parcial sem finalizar a conexão
                 res.write(sseMessage);
-            };
-
-            try {
-                await juridicoAgentService(pergunta, onChunk);
-
-                // Avisa que o streaming acabou
-                res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`);
-                res.end();
-
-                console.log(`✅ [Juridico Controller] Resposta enviada com sucesso (${fullResponse.length} caracteres)`);
-
-            } catch (error) {
-                console.error("❌ [Juridico Controller] Erro ao gerar resposta:", error);
-                
-                const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-                res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
-                res.end();
             }
-        } 
-        else {
-            // Fluxo sem streaming
-            try {
-                const response = await juridicoAgentService(pergunta);
 
-                // Envia a resposta para o cliente
-                res.status(200).json({
-                    success: true,
-                    response: response
-                });
+            try {
+
+                await juridicoAgentService(pergunta,document,name, chunk)
+
+                res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`); // fim do streaming
+                res.end()
 
             } catch (error) {
-                console.error("❌ [Juridico Controller] Erro ao gerar resposta:", error);
+                console.error("[Jurídico Controller] Erro ao gerar resposta:", error);
+
+                const errorMessage = error instanceof Error ? error.message : "Erro desconhecido"
+                res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
+                res.end()
+
+            }
+
+        }
+        else{
+            try {
+                const response = await juridicoAgentService(pergunta,document,name);
+
+                res.status(200).json({
+                    success:true,
+                    response:response
+                })
                 
-                const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-                res.status(500).json({
-                    success: false,
-                    error: errorMessage
-                });
+            } catch (error) {
+                console.error("[Juridico Controller] Erro na variável de streaming:", error);
+
+                if(!res.headersSent){
+                    res.status(500).json({
+                        error: error instanceof Error ? error.message : "Erro interno do servidor"
+
+                    })
+                }
+                
             }
         }
 
     } catch (error) {
         console.error("❌ [Juridico Controller] Erro geral:", error);
-        
+
         if (!res.headersSent) {
             res.status(500).json({
                 error: error instanceof Error ? error.message : "Erro interno do servidor"
@@ -106,22 +95,18 @@ export const juridicoAgentController = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Controller para ingestão de dados jurídicos
- * POST /juridico-ingest
- */
 export const juridicoIngestController = async (req: Request, res: Response) => {
     try {
-        const { jsonData } = req.body;
+        const { jsonData, document, name } = req.body;
 
-        if (!jsonData) {
-            return res.status(400).json({ 
-                error: "JSON de dados é obrigatório." 
+        if (!jsonData || !document || !name) {
+            return res.status(400).json({
+                error: "JSON ou documento ou pergunta é obrigatório."
             });
         }
 
 
-        const result = await ingestJuridicoData(jsonData);
+        const result = await ingestJuridicoData(jsonData,document,name);
 
         res.status(200).json({
             success: true,
@@ -132,7 +117,7 @@ export const juridicoIngestController = async (req: Request, res: Response) => {
 
     } catch (error) {
         console.error("[Juridico Controller] Erro na ingestão:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Erro interno na ingestão jurídica.",
             details: error instanceof Error ? error.message : String(error)
         });
