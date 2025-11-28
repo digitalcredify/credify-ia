@@ -1,315 +1,275 @@
-import { traceable } from "langsmith/traceable";
-import { juridicoComparativeAnalysisTool, 
-    juridicoDecisionsAnalysisTool, 
-    juridicoPartiesAnalysisTool, 
-    juridicoProcessAnalysisTool, 
-    juridicoSpecificQueryTool, 
-    juridicoTargetProfileAnalysisTool, 
-    juridicoTimelineAnalysisTool, 
-    runJuridicoToolRoutingAgent } from "../../tools/juridico/Juridicotools";
-import { content } from "pdfkit/js/page";
-import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
-import { advancedModel, balancedModel, fastModel } from "../../config";
-import { match } from "assert";
-
-
-const createJuridicoFilter = (document:string, name:string,) => {
-
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __asyncValues = (this && this.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.generateJuridicoResponse = void 0;
+const traceable_1 = require("langsmith/traceable");
+const Juridicotools_1 = require("../../tools/juridico/Juridicotools");
+const messages_1 = require("@langchain/core/messages");
+const config_1 = require("../../config");
+const createJuridicoFilter = (document, name) => {
     must: [
         {
             key: "metadata.document",
-            match: {value: document}
+            match: { value: document }
         },
         {
-            key:"metadata.name",
-            match: {value: name}
+            key: "metadata.name",
+            match: { value: name }
         }
-    ]
-
-
-}
-
-const selectAndExecuteTools = traceable(
-    async function selectAndExecuteTools(
-        pergunta: string,
-        document: string,
-        name: string): Promise<any[]> {
-
+    ];
+};
+const selectAndExecuteTools = (0, traceable_1.traceable)(function selectAndExecuteTools(pergunta, document, name) {
+    return __awaiter(this, void 0, void 0, function* () {
         console.log("[Juridico Planning] Selecionando ferramentas com agente inteligente...");
-
-        const tool = await runJuridicoToolRoutingAgent(pergunta, document, name)
-
-        const qdrantFilter = createJuridicoFilter(document,name)
-
-        const results: any[] = []
-
+        const tool = yield (0, Juridicotools_1.runJuridicoToolRoutingAgent)(pergunta, document, name);
+        const qdrantFilter = createJuridicoFilter(document, name);
+        const results = [];
         // ==================== PARTIES ANALYSIS ====================
         if (tool.tool === 'partiesAnalysis') {
-            console.log('[Juridico Planning] Usando PartiesAnalysis')
-
-            const resultPartiesAnalysis = await juridicoPartiesAnalysisTool({
+            console.log('[Juridico Planning] Usando PartiesAnalysis');
+            const resultPartiesAnalysis = yield (0, Juridicotools_1.juridicoPartiesAnalysisTool)({
                 query: pergunta,
-                filters:qdrantFilter
-            })
-
+                filters: qdrantFilter
+            });
             results.push({
                 tool: tool.tool,
                 data: resultPartiesAnalysis
-            })
+            });
         }
-
         // ==================== PROCESS ANALYSIS ====================
         if (tool.tool === 'processAnalysis') {
-            console.log('[Juridico Planning] Usando ProcessAnalysis')
-
-            const resultProcessAnalysis = await juridicoProcessAnalysisTool({
+            console.log('[Juridico Planning] Usando ProcessAnalysis');
+            const resultProcessAnalysis = yield (0, Juridicotools_1.juridicoProcessAnalysisTool)({
                 query: pergunta,
                 filters: qdrantFilter
-            })
-
+            });
             results.push({
                 tool: tool.tool,
                 data: resultProcessAnalysis
-            })
+            });
         }
-
         // ==================== DECISIONS ANALYSIS ====================
         if (tool.tool === 'decisionsAnalysis') {
-            console.log('[Juridico Planning] Usando DecisionsAnalysis')
-
-            const resultDecisionsAnalysis = await juridicoDecisionsAnalysisTool({
+            console.log('[Juridico Planning] Usando DecisionsAnalysis');
+            const resultDecisionsAnalysis = yield (0, Juridicotools_1.juridicoDecisionsAnalysisTool)({
                 query: pergunta,
                 filters: qdrantFilter
-            })
-
+            });
             results.push({
                 tool: tool.tool,
                 data: resultDecisionsAnalysis
-            })
+            });
         }
-
         // ==================== RISK ANALYSIS ====================
         // if (tool.tool === 'riskAnalysis') {
         //     console.log('[Juridico Planning] Usando RiskAnalysis')
-
         //     const resultRiskAnalysis = await juridicoRiskAnalysisTool({
         //         query: pergunta,
         //         filters: qdrantFilter
         //     })
-
         //     results.push({
         //         tool: tool.tool,
         //         data: resultRiskAnalysis
         //     })
         // }
-
         // ==================== COMPARATIVE ANALYSIS ====================
         if (tool.tool === 'comparativeAnalysis') {
-            console.log('[Juridico Planning] Usando ComparativeAnalysis')
-
-            const resultComparativeAnalysis = await juridicoComparativeAnalysisTool({
+            console.log('[Juridico Planning] Usando ComparativeAnalysis');
+            const resultComparativeAnalysis = yield (0, Juridicotools_1.juridicoComparativeAnalysisTool)({
                 query: pergunta,
                 filters: qdrantFilter
-            })
-
+            });
             results.push({
                 tool: tool.tool,
                 data: resultComparativeAnalysis
-            })
+            });
         }
-
         // ==================== TARGET PROFILE ANALYSIS ====================
         if (tool.tool === 'targetProfileAnalysis') {
-            console.log('[Juridico Planning] Usando TargetProfileAnalysis')
-
-            const resultTargetProfileAnalysis = await juridicoTargetProfileAnalysisTool({
+            console.log('[Juridico Planning] Usando TargetProfileAnalysis');
+            const resultTargetProfileAnalysis = yield (0, Juridicotools_1.juridicoTargetProfileAnalysisTool)({
                 query: pergunta,
                 filters: qdrantFilter
-            })
-
+            });
             results.push({
                 tool: tool.tool,
                 data: resultTargetProfileAnalysis
-            })
+            });
         }
-
-         // ==================== TIMELINE ANALYSIS ====================
+        // ==================== TIMELINE ANALYSIS ====================
         if (tool.tool === 'timelineAnalysis') {
-            console.log('[Juridico Planning] Usando TimelineAnalysis')
-
-            const resultTimelineAnalysis = await juridicoTimelineAnalysisTool({
+            console.log('[Juridico Planning] Usando TimelineAnalysis');
+            const resultTimelineAnalysis = yield (0, Juridicotools_1.juridicoTimelineAnalysisTool)({
                 query: pergunta,
                 filters: qdrantFilter
-            })
-
+            });
             results.push({
                 tool: tool.tool,
                 data: resultTimelineAnalysis
-            })
+            });
         }
-
         // ==================== SPECIFIC QUERY ====================
         if (tool.tool === 'specificQuery') {
-            console.log('[Juridico Planning] Usando SpecificQuery')
-
-            const resultSpecificQuery = await juridicoSpecificQueryTool({
+            console.log('[Juridico Planning] Usando SpecificQuery');
+            const resultSpecificQuery = yield (0, Juridicotools_1.juridicoSpecificQueryTool)({
                 query: pergunta,
                 filters: qdrantFilter
-            })
-
+            });
             results.push({
                 tool: tool.tool,
                 data: resultSpecificQuery
-            })
+            });
         }
-
-        console.log(`[Juridico Planning] ${results.length} ferramentas executadas`)
-
-        return results
-
-    }
-)
-
-async function generateResponseOpenAI(
-    messages: any,
-    modelType: "advanced" | "balanced" | "fast" = "advanced",
-    onChunk?: (chunk: string) => void
-): Promise<string> {
-    try {
-        const langchainMessages = messages.map((msg: any) => {
-            if (msg.role === "system") return new SystemMessage(msg.content);
-            if (msg.role === "user") return new HumanMessage(msg.content);
-            if (msg.role === "assistant") return new AIMessage(msg.content);
-            return new HumanMessage(msg.content);
-        });
-
-        let selectedModel;
-        if (modelType === "advanced") {
-            selectedModel = advancedModel;
-        } else if (modelType === "balanced") {
-            selectedModel = balancedModel;
-        } else {
-            selectedModel = fastModel;
-        }
-
-        if (onChunk) {
-            const stream = await selectedModel.stream(langchainMessages);
-            let fullResponse = "";
-
-            for await (const chunk of stream) {
-                const content = String(chunk.content || "");
-
-                if (content) {
-                    onChunk(content);
-                }
-
-                fullResponse += content;
+        console.log(`[Juridico Planning] ${results.length} ferramentas executadas`);
+        return results;
+    });
+});
+function generateResponseOpenAI(messages_2) {
+    return __awaiter(this, arguments, void 0, function* (messages, modelType = "advanced", onChunk) {
+        var _a, e_1, _b, _c;
+        try {
+            const langchainMessages = messages.map((msg) => {
+                if (msg.role === "system")
+                    return new messages_1.SystemMessage(msg.content);
+                if (msg.role === "user")
+                    return new messages_1.HumanMessage(msg.content);
+                if (msg.role === "assistant")
+                    return new messages_1.AIMessage(msg.content);
+                return new messages_1.HumanMessage(msg.content);
+            });
+            let selectedModel;
+            if (modelType === "advanced") {
+                selectedModel = config_1.advancedModel;
             }
-
-            return fullResponse;
-        } else {
-            const response = await selectedModel.invoke(langchainMessages);
-            return String(response.content);
+            else if (modelType === "balanced") {
+                selectedModel = config_1.balancedModel;
+            }
+            else {
+                selectedModel = config_1.fastModel;
+            }
+            if (onChunk) {
+                const stream = yield selectedModel.stream(langchainMessages);
+                let fullResponse = "";
+                try {
+                    for (var _d = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = yield stream_1.next(), _a = stream_1_1.done, !_a; _d = true) {
+                        _c = stream_1_1.value;
+                        _d = false;
+                        const chunk = _c;
+                        const content = String(chunk.content || "");
+                        if (content) {
+                            onChunk(content);
+                        }
+                        fullResponse += content;
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (!_d && !_a && (_b = stream_1.return)) yield _b.call(stream_1);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                return fullResponse;
+            }
+            else {
+                const response = yield selectedModel.invoke(langchainMessages);
+                return String(response.content);
+            }
         }
-
-    } catch (error) {
-        console.error("Error in OpenAiChatCompletion:", error);
-        throw error;
-    }
+        catch (error) {
+            console.error("Error in OpenAiChatCompletion:", error);
+            throw error;
+        }
+    });
 }
-
-export const generateJuridicoResponse = traceable(
-    async function generateJuridicoResponse(
-        pergunta: string,
-        document: string,
-        name: string,
-        onChunk?: (chunk: string) => void
-    ): Promise<string> {
+exports.generateJuridicoResponse = (0, traceable_1.traceable)(function generateJuridicoResponse(pergunta, document, name, onChunk) {
+    return __awaiter(this, void 0, void 0, function* () {
         try {
             console.log("[Juridico Planning] Gerando resposta para pergunta jurídica...");
-
-            const toolResults = await selectAndExecuteTools(pergunta, document, name);
-
+            const toolResults = yield selectAndExecuteTools(pergunta, document, name);
             let context = `
                 Documento analisado analisado: ${document}.
                 Nome da empresa: ${name}.
-            `
-           
-
+            `;
             context += `\n\n`;
-
-             for (const result of toolResults) {
-
+            for (const result of toolResults) {
                 if (result.tool === 'processAnalysis') {
                     context += "=== ANÁLISE DE PROCESSOS ===\n";
                     context += "Detalhes dos processos encontrados:\n";
                     context += JSON.stringify(result.data, null, 2) + "\n\n";
                 }
-
                 if (result.tool === 'partiesAnalysis') {
                     context += "=== ANÁLISE DE PARTES ===\n";
                     context += "Informações das partes envolvidas:\n";
                     context += JSON.stringify(result.data, null, 2) + "\n\n";
                 }
-
                 if (result.tool === 'decisionsAnalysis') {
                     context += "=== ANÁLISE DE DECISÕES ===\n";
                     context += "Histórico de decisões e julgamentos:\n";
                     context += JSON.stringify(result.data, null, 2) + "\n\n";
                 }
-
                 if (result.tool === 'riskAnalysis') {
                     context += "=== ANÁLISE DE RISCO ===\n";
                     context += "Métricas de risco e exposição:\n";
-                    
                     // Extrai métricas de risco se disponível
                     if (result.data && result.data.length > 0 && result.data[0].riskMetrics) {
                         context += JSON.stringify(result.data[0].riskMetrics, null, 2) + "\n\n";
-                    } else {
+                    }
+                    else {
                         context += JSON.stringify(result.data, null, 2) + "\n\n";
                     }
                 }
-
                 if (result.tool === 'comparativeAnalysis') {
                     context += "=== ANÁLISE COMPARATIVA ===\n";
                     context += "Distribuição de processos por tribunal, área, UF e classe:\n";
-                    
                     if (result.data && result.data.length > 0 && result.data[0].comparativeMetrics) {
                         context += JSON.stringify(result.data[0].comparativeMetrics, null, 2) + "\n\n";
-                    } else {
+                    }
+                    else {
                         context += JSON.stringify(result.data, null, 2) + "\n\n";
                     }
                 }
-
                 if (result.tool === 'targetProfileAnalysis') {
                     context += "=== ANÁLISE DE PERFIL ===\n";
                     context += "Perfil do alvo e padrão de envolvimento em processos:\n";
-                    
                     if (result.data && result.data.length > 0 && result.data[0].profileMetrics) {
                         context += JSON.stringify(result.data[0].profileMetrics, null, 2) + "\n\n";
-                    } else {
+                    }
+                    else {
                         context += JSON.stringify(result.data, null, 2) + "\n\n";
                     }
                 }
-
                 if (result.tool === 'timelineAnalysis') {
                     context += "=== ANÁLISE TEMPORAL ===\n";
                     context += "Evolução temporal dos processos:\n";
-                    
                     if (result.data && result.data.length > 0 && result.data[0].timelineMetrics) {
                         context += JSON.stringify(result.data[0].timelineMetrics, null, 2) + "\n\n";
-                    } else {
+                    }
+                    else {
                         context += JSON.stringify(result.data, null, 2) + "\n\n";
                     }
                 }
-
                 if (result.tool === 'specificQuery') {
                     context += "=== BUSCA ESPECÍFICA ===\n";
                     context += "Resultados da busca customizada:\n";
                     context += JSON.stringify(result.data, null, 2) + "\n\n";
                 }
             }
-
             const systemPrompt = `
             Você é um especialista em análise jurídica especializado em litigância e compliance. 
             Sua tarefa é analisar dados de processos judiciais e fornecer respostas precisas, 
@@ -513,25 +473,17 @@ Agora responda à pergunta do usuário com base EXCLUSIVAMENTE nos dados forneci
 
 
 `;
-
-
             const messages = [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: pergunta }
-            ]
-
-            const response = await generateResponseOpenAI(messages, "fast", onChunk)
-
-            console.log("[Juridico Planning] Resposta gerada com sucesso")
-
-            return response
-
-
-        } catch (error) {
-            console.error("[Juridico Planning] Erro ao gerar resposta:", error)
-            throw error
+            ];
+            const response = yield generateResponseOpenAI(messages, "fast", onChunk);
+            console.log("[Juridico Planning] Resposta gerada com sucesso");
+            return response;
         }
-    },
-    { name: "Gerando Resposta Juridica", run_type: "chain" }
-
-)
+        catch (error) {
+            console.error("[Juridico Planning] Erro ao gerar resposta:", error);
+            throw error;
+        }
+    });
+}, { name: "Gerando Resposta Juridica", run_type: "chain" });

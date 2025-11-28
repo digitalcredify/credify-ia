@@ -1,8 +1,8 @@
 "use strict";
 /**
  * @fileoverview
- * recebe a requisição, valida os dados de entrada, decide se é com ou sem streaming e chama o operationAgentService
- * oq é streaming?: envia a resposta em chunks (pedaços de texto), igual ao chatGPT
+ * Controller para o agente jurídico
+ * Recebe requisições de chat jurídico e as processa
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -14,21 +14,23 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.operationAgentController = void 0;
+exports.juridicoIngestController = exports.juridicoAgentController = void 0;
 const config_1 = require("../config");
-const operationAgentService_1 = require("../service/operationAgentService");
-const operationAgentController = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const ingest_juridico_data_1 = require("../scripts/juridico/ingest-juridico-data");
+const juridicoAgentService_1 = require("../service/juridicoAgentService");
+const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { pergunta, jsonData, startDate, endDate, startHour, endHour } = req.body;
-        if (!pergunta || !jsonData || !startDate || !endDate) {
+        const { pergunta, document, name } = req.body;
+        if (!pergunta || !document || !name) {
             return res.status(400).json({
-                error: "Campos obrigatórios: pergunta, jsonData, startDate, endDate"
+                error: "Campos obrigatórios: pergunta, documento e nome"
             });
         }
-        console.log(`📝 Pergunta recebida: "${pergunta}"`);
-        console.log(`📅 Range: ${startDate} a ${endDate}`);
-        console.log(`🔄 Streaming: ${config_1.ENABLE_STREAMING ? 'HABILITADO' : 'DESABILITADO'}`);
-        // fluxo  com streaming.
+        console.log(`📝 [Juridico Controller] Pergunta recebida: "${pergunta}"`);
+        console.log(`📄 [Juridico Controller] Documento: ${document}`);
+        console.log(`🏷️ [Juridico Controller] Nome: ${name}`);
+        console.log(`🔄 [Juridico Controller] Streaming: ${config_1.ENABLE_STREAMING ? 'HABILITADO' : 'DESABILITADO'}`);
+        // fluxo com streaming
         if (config_1.ENABLE_STREAMING) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
@@ -42,12 +44,12 @@ const operationAgentController = (req, res) => __awaiter(void 0, void 0, void 0,
                 res.write(sseMessage);
             };
             try {
-                yield (0, operationAgentService_1.operationAgentService)(pergunta, jsonData, startDate, endDate, startHour, endHour, chunk);
+                yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name, chunk);
                 res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`); // fim do streaming
                 res.end();
             }
             catch (error) {
-                console.error("[Controller] Erro ao gerar resposta:", error);
+                console.error("[Jurídico Controller] Erro ao gerar resposta:", error);
                 const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
                 res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
                 res.end();
@@ -55,14 +57,14 @@ const operationAgentController = (req, res) => __awaiter(void 0, void 0, void 0,
         }
         else {
             try {
-                const response = yield (0, operationAgentService_1.operationAgentService)(pergunta, jsonData, startDate, endDate, startHour, endHour);
+                const response = yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name);
                 res.status(200).json({
                     success: true,
                     response: response
                 });
             }
             catch (error) {
-                console.error("[Controller] Erro na variável de streaming:", error);
+                console.error("[Juridico Controller] Erro na variável de streaming:", error);
                 if (!res.headersSent) {
                     res.status(500).json({
                         error: error instanceof Error ? error.message : "Erro interno do servidor"
@@ -72,6 +74,7 @@ const operationAgentController = (req, res) => __awaiter(void 0, void 0, void 0,
         }
     }
     catch (error) {
+        console.error("❌ [Juridico Controller] Erro geral:", error);
         if (!res.headersSent) {
             res.status(500).json({
                 error: error instanceof Error ? error.message : "Erro interno do servidor"
@@ -79,4 +82,29 @@ const operationAgentController = (req, res) => __awaiter(void 0, void 0, void 0,
         }
     }
 });
-exports.operationAgentController = operationAgentController;
+exports.juridicoAgentController = juridicoAgentController;
+const juridicoIngestController = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { jsonData, document, name } = req.body;
+        if (!jsonData || !document || !name) {
+            return res.status(400).json({
+                error: "JSON ou documento ou pergunta é obrigatório."
+            });
+        }
+        const result = yield (0, ingest_juridico_data_1.ingestJuridicoData)(jsonData, document, name);
+        res.status(200).json({
+            success: true,
+            sessionId: result.sessionId,
+            count: result.count,
+            message: `${result.count} documentos jurídicos ingeridos com sucesso.`
+        });
+    }
+    catch (error) {
+        console.error("[Juridico Controller] Erro na ingestão:", error);
+        res.status(500).json({
+            error: "Erro interno na ingestão jurídica.",
+            details: error instanceof Error ? error.message : String(error)
+        });
+    }
+});
+exports.juridicoIngestController = juridicoIngestController;

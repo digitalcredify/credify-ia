@@ -24,7 +24,7 @@ export const juridicoAgentService = async (
                 return await runJuridicoWebAgent(pergunta,document, name,onChunk)
             
             case 'pdf_agent':
-                console.log('[Juridico Service] Roteando para Jurídico sPDF Agent');
+                console.log('[Juridico Service] Roteando para Jurídico PDF Agent');
                 const sessionId = `juridico_${Date.now()}`;
                 return await runPdfAgent(sessionId, pergunta);
             

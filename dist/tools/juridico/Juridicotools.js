@@ -1,30 +1,26 @@
-import { HumanMessage, SystemMessage } from "langchain";
-import { traceable } from "langsmith/traceable";
-import { balancedModel, openAiEmbbeding, qdrantClient } from "../../config";
-import { JsonOutputParser } from "@langchain/core/output_parsers";
-import { QdrantVectorStore } from "@langchain/qdrant";
-
-const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection'
-
-
-interface JuridicoToolDefinition {
-    name: string,
-    description: string,
-    keywords: string[]
-}
-
-interface AnalysisResult {
-    type: string;
-    data: any;
-    summary: string;
-}
-
-const vectorStore = new QdrantVectorStore(openAiEmbbeding, {
-    client: qdrantClient,
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.JURIDICO_TOOLS = exports.juridicoSpecificQueryTool = exports.juridicoTimelineAnalysisTool = exports.juridicoTargetProfileAnalysisTool = exports.juridicoComparativeAnalysisTool = exports.juridicoDecisionsAnalysisTool = exports.juridicoPartiesAnalysisTool = exports.juridicoProcessAnalysisTool = exports.runJuridicoToolRoutingAgent = void 0;
+const langchain_1 = require("langchain");
+const traceable_1 = require("langsmith/traceable");
+const config_1 = require("../../config");
+const output_parsers_1 = require("@langchain/core/output_parsers");
+const qdrant_1 = require("@langchain/qdrant");
+const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection';
+const vectorStore = new qdrant_1.QdrantVectorStore(config_1.openAiEmbbeding, {
+    client: config_1.qdrantClient,
     collectionName: QDRANT_JURIDICO_COLLECTION_NAME,
 });
-
-const JURIDICO_TOOLS: JuridicoToolDefinition[] = [
+const JURIDICO_TOOLS = [
     {
         name: "processAnalysis",
         description: "Analisa detalhes de processos específicos: número CNJ, status, valor da causa, tribunal, área, classe processual, data de distribuição",
@@ -66,16 +62,10 @@ const JURIDICO_TOOLS: JuridicoToolDefinition[] = [
         keywords: ["qual", "quais", "onde", "como", "por quê", "detalhes", "informações"]
     }
 ];
-
-
-
-
-export const runJuridicoToolRoutingAgent = traceable(
-
-    async function runJuridicoToolRoutingAgent(pergunta: string,document:string, name:string):
-        Promise<any> {
-
-        const parser = new JsonOutputParser();
+exports.JURIDICO_TOOLS = JURIDICO_TOOLS;
+exports.runJuridicoToolRoutingAgent = (0, traceable_1.traceable)(function runJuridicoToolRoutingAgent(pergunta, document, name) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const parser = new output_parsers_1.JsonOutputParser();
         const systemPrompt = `
             Você é um agente especealizado em direcionar perguntas sobre processos judiciais para as ferramentas corretas.
 
@@ -99,189 +89,140 @@ export const runJuridicoToolRoutingAgent = traceable(
                 - Pode retornar múltiplas ferramentas se a pergunta exigir  
 
             Responda APENAS com o JSON, sem explicações adicionais.`;
-
         const messages = [
-            new SystemMessage(systemPrompt),
-            new HumanMessage(pergunta)
-        ]
-
+            new langchain_1.SystemMessage(systemPrompt),
+            new langchain_1.HumanMessage(pergunta)
+        ];
         try {
-
-            const chain = balancedModel.pipe(parser)
-            const response = await chain.invoke(messages);
-            
-            return response
-
-        } catch (error) {
-
-            console.error("[Juridico Tool Routing] Erro ao processar resposta do modelo:", error);
-
-            console.log("[Juridico Tool Routing] Usando fallback com heurística simples");
-
-            // return fallbackJuridicoToolRouting(pergunta);
-
+            const chain = config_1.balancedModel.pipe(parser);
+            const response = yield chain.invoke(messages);
+            return response;
         }
-    },
-    { name: "Juridico tool - Roteador", run_type: "chain" }
-
-)
-
-function createJuridicoFilter(document?: string, name?: string) {
-    const filters: any = {
+        catch (error) {
+            console.error("[Juridico Tool Routing] Erro ao processar resposta do modelo:", error);
+            console.log("[Juridico Tool Routing] Usando fallback com heurística simples");
+            // return fallbackJuridicoToolRouting(pergunta);
+        }
+    });
+}, { name: "Juridico tool - Roteador", run_type: "chain" });
+function createJuridicoFilter(document, name) {
+    const filters = {
         must: []
     };
-
     if (document !== undefined) {
         filters.must.push({
             key: "metadata.document",
             match: { value: document }
         });
     }
-
     if (name !== undefined) {
         filters.must.push({
             key: "metadata.name",
             match: { value: name }
         });
     }
-
     return filters.must.length > 0 ? filters : undefined;
 }
-
-
-export const juridicoProcessAnalysisTool = traceable(
-    async function juridicoProcessAnalysisTool(input: {query: string, filters:any}) {
-        console.log("[Juridico Process Analysis] Analisando detalhes de processos 📋")
-
-        try {
-            const retriever = vectorStore.asRetriever({
-                k:50,
-                filter:input.filters
-            })
-
-            const results = await retriever._getRelevantDocuments(input.query)
-            console.log(`🔍 [Juridico Process Analysis]: ${results.length} processos encontrados`);
-
-            return results.map(doc => ({
-                document:doc,
-                score:null
-            }))
-
-
-        } catch (error:any) {
-            console.error("❌ Erro no juridicoProcessAnalysisTool:", error.message);
-            return []
-        }        
-    },
-    { name: "Juridico Process Analysis (Tool)", run_type: "retriever" }
-)
-
-
-export const juridicoPartiesAnalysisTool = traceable(
-    async function juridicoPartiesAnalysisTool(input: {query:string, filters:any}) {
-
-        console.log("[Juridico Parties Analysis] Analisando partes envolvidas 👥")
-
-        try {
-            const retriever = vectorStore.asRetriever({
-                k:50,
-                filter:input.filters
-            })
-
-            const results = await retriever._getRelevantDocuments(input.query)
-
-            console.log(`🔍 [Juridico Parties Analysis]: ${results.length} documentos encontrados`);
-
-            return results.map(doc => ({
-                document: doc,
-                score: null
-            }))
-
-
-            
-        } catch (error:any) {
-            console.error("❌ Erro no juridicoPartiesAnalysisTool:", error.message);
-            return []
-        }
-        
-    },
-    { name: "Juridico Parties Analysis (Tool)", run_type: "retriever" }
-)
-
-export const juridicoDecisionsAnalysisTool = traceable(
-    async function juridicoDecisionsAnalysis(input: { query: string, filters: any }) {
-        console.log("[Juridico Decisions Analysis] Analisando decisões e julgamentos ⚖️")
-
+exports.juridicoProcessAnalysisTool = (0, traceable_1.traceable)(function juridicoProcessAnalysisTool(input) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log("[Juridico Process Analysis] Analisando detalhes de processos 📋");
         try {
             const retriever = vectorStore.asRetriever({
                 k: 50,
                 filter: input.filters
-            })
-
-            const results = await retriever._getRelevantDocuments(input.query)
-
-            console.log(`🔍 [Juridico Decisions Analysis]: ${results.length} decisões encontradas`);
-
+            });
+            const results = yield retriever._getRelevantDocuments(input.query);
+            console.log(`🔍 [Juridico Process Analysis]: ${results.length} processos encontrados`);
             return results.map(doc => ({
                 document: doc,
                 score: null
-            }))
-
-        } catch (error: any) {
-            console.error("❌ Erro no juridicoDecisionsAnalysisTool:", error.message);
-            return []
+            }));
         }
-    },
-    { name: "Juridico Decisions Analysis (Tool)", run_type: "retriever" }
-)
-
+        catch (error) {
+            console.error("❌ Erro no juridicoProcessAnalysisTool:", error.message);
+            return [];
+        }
+    });
+}, { name: "Juridico Process Analysis (Tool)", run_type: "retriever" });
+exports.juridicoPartiesAnalysisTool = (0, traceable_1.traceable)(function juridicoPartiesAnalysisTool(input) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log("[Juridico Parties Analysis] Analisando partes envolvidas 👥");
+        try {
+            const retriever = vectorStore.asRetriever({
+                k: 50,
+                filter: input.filters
+            });
+            const results = yield retriever._getRelevantDocuments(input.query);
+            console.log(`🔍 [Juridico Parties Analysis]: ${results.length} documentos encontrados`);
+            return results.map(doc => ({
+                document: doc,
+                score: null
+            }));
+        }
+        catch (error) {
+            console.error("❌ Erro no juridicoPartiesAnalysisTool:", error.message);
+            return [];
+        }
+    });
+}, { name: "Juridico Parties Analysis (Tool)", run_type: "retriever" });
+exports.juridicoDecisionsAnalysisTool = (0, traceable_1.traceable)(function juridicoDecisionsAnalysis(input) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log("[Juridico Decisions Analysis] Analisando decisões e julgamentos ⚖️");
+        try {
+            const retriever = vectorStore.asRetriever({
+                k: 50,
+                filter: input.filters
+            });
+            const results = yield retriever._getRelevantDocuments(input.query);
+            console.log(`🔍 [Juridico Decisions Analysis]: ${results.length} decisões encontradas`);
+            return results.map(doc => ({
+                document: doc,
+                score: null
+            }));
+        }
+        catch (error) {
+            console.error("❌ Erro no juridicoDecisionsAnalysisTool:", error.message);
+            return [];
+        }
+    });
+}, { name: "Juridico Decisions Analysis (Tool)", run_type: "retriever" });
 // export const juridicoRiskAnalysisTool = traceable(
 //     async function juridicoRiskAnalysis(input: { query: string, filters: any }) {
 //         console.log("[Juridico Risk Analysis] Analisando riscos legais 📊")
-
 //         try {
 //             const retriever = vectorStore.asRetriever({
 //                 k: 1000, // Recupera mais documentos para análise de risco
 //                 filter: input.filters
 //             })
-
 //             const results = await retriever._getRelevantDocuments(input.query)
-
 //             console.log(`🔍 [Juridico Risk Analysis]: ${results.length} processos analisados`);
-
 //             // Calcula métricas de risco
 //             let totalValue = 0;
 //             let activeProcesses = 0;
 //             let closedProcesses = 0;
 //             const tribunalCount: { [key: string]: number } = {};
 //             const areaCount: { [key: string]: number } = {};
-
 //             results.forEach(doc => {
 //                 const metadata = doc.metadata;
-                
 //                 // Soma valor total
 //                 if (metadata?.value) {
 //                     totalValue += metadata.value;
 //                 }
-
 //                 // Conta processos por status
 //                 if (metadata?.status === 'Ativo' || metadata?.status === 'Em andamento') {
 //                     activeProcesses++;
 //                 } else {
 //                     closedProcesses++;
 //                 }
-
 //                 // Conta por tribunal
 //                 if (metadata?.tribunal) {
 //                     tribunalCount[metadata.tribunal] = (tribunalCount[metadata.tribunal] || 0) + 1;
 //                 }
-
 //                 // Conta por área
 //                 if (metadata?.area) {
 //                     areaCount[metadata.area] = (areaCount[metadata.area] || 0) + 1;
 //                 }
 //             });
-
 //             const riskSummary = {
 //                 totalProcesses: results.length,
 //                 totalValue,
@@ -291,13 +232,11 @@ export const juridicoDecisionsAnalysisTool = traceable(
 //                 areaDistribution: areaCount,
 //                 averageValuePerProcess: results.length > 0 ? totalValue / results.length : 0
 //             };
-
 //             return results.map(doc => ({
 //                 document: doc,
 //                 score: null,
 //                 riskMetrics: riskSummary
 //             }))
-
 //         } catch (error: any) {
 //             console.error("❌ Erro no juridicoRiskAnalysisTool:", error.message);
 //             return []
@@ -305,57 +244,47 @@ export const juridicoDecisionsAnalysisTool = traceable(
 //     },
 //     { name: "Juridico Risk Analysis (Tool)", run_type: "retriever" }
 // )
-
-export const juridicoComparativeAnalysisTool = traceable(
-    async function juridicoComparativeAnalysis(input: { query: string, filters: any }) {
-        console.log("[Juridico Comparative Analysis] Analisando distribuição de processos 📈")
-
+exports.juridicoComparativeAnalysisTool = (0, traceable_1.traceable)(function juridicoComparativeAnalysis(input) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log("[Juridico Comparative Analysis] Analisando distribuição de processos 📈");
         try {
             const retriever = vectorStore.asRetriever({
                 k: 1000,
                 filter: input.filters
-            })
-
-            const results = await retriever._getRelevantDocuments(input.query)
-
+            });
+            const results = yield retriever._getRelevantDocuments(input.query);
             console.log(`🔍 [Juridico Comparative Analysis]: ${results.length} processos comparados`);
-
             // Agrupa por tribunal, área, UF, classe
-            const byTribunal: { [key: string]: { count: number; value: number } } = {};
-            const byArea: { [key: string]: { count: number; value: number } } = {};
-            const byUF: { [key: string]: { count: number; value: number } } = {};
-            const byClass: { [key: string]: { count: number; value: number } } = {};
-
+            const byTribunal = {};
+            const byArea = {};
+            const byUF = {};
+            const byClass = {};
             results.forEach(doc => {
                 const metadata = doc.metadata;
-
                 // Por tribunal
-                if (metadata?.tribunal) {
+                if (metadata === null || metadata === void 0 ? void 0 : metadata.tribunal) {
                     if (!byTribunal[metadata.tribunal]) {
                         byTribunal[metadata.tribunal] = { count: 0, value: 0 };
                     }
                     byTribunal[metadata.tribunal].count++;
                     byTribunal[metadata.tribunal].value += metadata.value || 0;
                 }
-
                 // Por área
-                if (metadata?.area) {
+                if (metadata === null || metadata === void 0 ? void 0 : metadata.area) {
                     if (!byArea[metadata.area]) {
                         byArea[metadata.area] = { count: 0, value: 0 };
                     }
                     byArea[metadata.area].count++;
                     byArea[metadata.area].value += metadata.value || 0;
                 }
-
                 // Por UF
-                if (metadata?.uf) {
+                if (metadata === null || metadata === void 0 ? void 0 : metadata.uf) {
                     if (!byUF[metadata.uf]) {
                         byUF[metadata.uf] = { count: 0, value: 0 };
                     }
                     byUF[metadata.uf].count++;
                     byUF[metadata.uf].value += metadata.value || 0;
                 }
-
                 // Por classe (extrair do pageContent ou metadata)
                 const pageContent = doc.pageContent || '';
                 const classMatch = pageContent.match(/Classe Processual: ([^\n]+)/);
@@ -365,61 +294,51 @@ export const juridicoComparativeAnalysisTool = traceable(
                         byClass[processClass] = { count: 0, value: 0 };
                     }
                     byClass[processClass].count++;
-                    byClass[processClass].value += metadata?.value || 0;
+                    byClass[processClass].value += (metadata === null || metadata === void 0 ? void 0 : metadata.value) || 0;
                 }
             });
-
             const comparativeData = {
                 byTribunal,
                 byArea,
                 byUF,
                 byClass
             };
-
             return results.map(doc => ({
                 document: doc,
                 score: null,
                 comparativeMetrics: comparativeData
-            }))
-
-        } catch (error: any) {
-            console.error("❌ Erro no juridicoComparativeAnalysisTool:", error.message);
-            return []
+            }));
         }
-    },
-    { name: "Juridico Comparative Analysis (Tool)", run_type: "retriever" }
-)
-
-export const juridicoTargetProfileAnalysisTool = traceable(
-    async function juridicoTargetProfileAnalysis(input: { query: string, filters: any }) {
-        console.log("[Juridico Target Profile Analysis] Analisando perfil do alvo 🎯")
-
+        catch (error) {
+            console.error("❌ Erro no juridicoComparativeAnalysisTool:", error.message);
+            return [];
+        }
+    });
+}, { name: "Juridico Comparative Analysis (Tool)", run_type: "retriever" });
+exports.juridicoTargetProfileAnalysisTool = (0, traceable_1.traceable)(function juridicoTargetProfileAnalysis(input) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log("[Juridico Target Profile Analysis] Analisando perfil do alvo 🎯");
         try {
             const retriever = vectorStore.asRetriever({
                 k: 1000,
                 filter: input.filters
-            })
-
-            const results = await retriever._getRelevantDocuments(input.query)
-
+            });
+            const results = yield retriever._getRelevantDocuments(input.query);
             console.log(`🔍 [Juridico Target Profile Analysis]: ${results.length} registros analisados`);
-
             // Analisa padrão de envolvimento
             let asAuthor = 0;
             let asDefendant = 0;
-            const lawyerFrequency: { [key: string]: number } = {};
-            const processAreas: { [key: string]: number } = {};
-
+            const lawyerFrequency = {};
+            const processAreas = {};
             results.forEach(doc => {
                 const pageContent = doc.pageContent || '';
-
                 // Conta como autor ou réu
                 if (pageContent.includes('Polo: Ativo')) {
                     asAuthor++;
-                } else if (pageContent.includes('Polo: Passivo')) {
+                }
+                else if (pageContent.includes('Polo: Passivo')) {
                     asDefendant++;
                 }
-
                 // Extrai advogados
                 const lawyerMatch = pageContent.match(/Advogados: ([^\n]+)/g);
                 if (lawyerMatch) {
@@ -433,7 +352,6 @@ export const juridicoTargetProfileAnalysisTool = traceable(
                         });
                     });
                 }
-
                 // Conta áreas
                 const areaMatch = pageContent.match(/Área: ([^\n]+)/);
                 if (areaMatch) {
@@ -441,7 +359,6 @@ export const juridicoTargetProfileAnalysisTool = traceable(
                     processAreas[area] = (processAreas[area] || 0) + 1;
                 }
             });
-
             const profileData = {
                 totalProcesses: results.length,
                 asAuthor,
@@ -451,62 +368,54 @@ export const juridicoTargetProfileAnalysisTool = traceable(
                 frequentLawyers: Object.entries(lawyerFrequency)
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 5)
-                    .reduce((acc, [name, count]) => ({ ...acc, [name]: count }), {}),
+                    .reduce((acc, [name, count]) => (Object.assign(Object.assign({}, acc), { [name]: count })), {}),
                 processAreas
             };
-
             return results.map(doc => ({
                 document: doc,
                 score: null,
                 profileMetrics: profileData
-            }))
-
-        } catch (error: any) {
-            console.error("❌ Erro no juridicoTargetProfileAnalysisTool:", error.message);
-            return []
+            }));
         }
-    },
-    { name: "Juridico Target Profile Analysis (Tool)", run_type: "retriever" }
-)
-
-export const juridicoTimelineAnalysisTool = traceable(
-    async function juridicoTimelineAnalysis(input: { query: string, filters: any }) {
-        console.log("[Juridico Timeline Analysis] Analisando evolução temporal ⏱️")
-
+        catch (error) {
+            console.error("❌ Erro no juridicoTargetProfileAnalysisTool:", error.message);
+            return [];
+        }
+    });
+}, { name: "Juridico Target Profile Analysis (Tool)", run_type: "retriever" });
+exports.juridicoTimelineAnalysisTool = (0, traceable_1.traceable)(function juridicoTimelineAnalysis(input) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log("[Juridico Timeline Analysis] Analisando evolução temporal ⏱️");
         try {
             const retriever = vectorStore.asRetriever({
                 k: 1000,
                 filter: input.filters
-            })
-
-            const results = await retriever._getRelevantDocuments(input.query)
-
+            });
+            const results = yield retriever._getRelevantDocuments(input.query);
             console.log(`🔍 [Juridico Timeline Analysis]: ${results.length} processos analisados`);
-
             // Agrupa por ano
-            const byYear: { [key: string]: number } = {};
+            const byYear = {};
             let oldestDate = new Date();
             let newestDate = new Date(0);
-
             results.forEach(doc => {
                 const pageContent = doc.pageContent || '';
                 const dateMatch = pageContent.match(/Data de Distribuição.*?: ([^\n]+)/);
-                
                 if (dateMatch) {
                     const dateStr = dateMatch[1].trim();
                     try {
                         const date = new Date(dateStr);
                         const year = date.getFullYear().toString();
                         byYear[year] = (byYear[year] || 0) + 1;
-
-                        if (date < oldestDate) oldestDate = date;
-                        if (date > newestDate) newestDate = date;
-                    } catch (e) {
+                        if (date < oldestDate)
+                            oldestDate = date;
+                        if (date > newestDate)
+                            newestDate = date;
+                    }
+                    catch (e) {
                         // Ignora datas inválidas
                     }
                 }
             });
-
             const timelineData = {
                 totalProcesses: results.length,
                 oldestProcess: oldestDate.getFullYear() !== new Date().getFullYear() ? oldestDate.toISOString().split('T')[0] : 'N/A',
@@ -514,60 +423,36 @@ export const juridicoTimelineAnalysisTool = traceable(
                 processesByYear: byYear,
                 timespan: Object.keys(byYear).length > 0 ? `${Math.min(...Object.keys(byYear).map(Number))} - ${Math.max(...Object.keys(byYear).map(Number))}` : 'N/A'
             };
-
             return results.map(doc => ({
                 document: doc,
                 score: null,
                 timelineMetrics: timelineData
-            }))
-
-        } catch (error: any) {
-            console.error("❌ Erro no juridicoTimelineAnalysisTool:", error.message);
-            return []
+            }));
         }
-    },
-    { name: "Juridico Timeline Analysis (Tool)", run_type: "retriever" }
-)
-
-export const juridicoSpecificQueryTool = traceable(
-    async function juridicoSpecificQuery(input: { query: string, filters: any }) {
-        console.log("[Juridico Specific Query] Executando busca customizada 🔎")
-
+        catch (error) {
+            console.error("❌ Erro no juridicoTimelineAnalysisTool:", error.message);
+            return [];
+        }
+    });
+}, { name: "Juridico Timeline Analysis (Tool)", run_type: "retriever" });
+exports.juridicoSpecificQueryTool = (0, traceable_1.traceable)(function juridicoSpecificQuery(input) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log("[Juridico Specific Query] Executando busca customizada 🔎");
         try {
             const retriever = vectorStore.asRetriever({
                 k: 100,
                 filter: input.filters
-            })
-
-            const results = await retriever._getRelevantDocuments(input.query)
-
+            });
+            const results = yield retriever._getRelevantDocuments(input.query);
             console.log(`🔍 [Juridico Specific Query]: ${results.length} resultados encontrados`);
-
             return results.map(doc => ({
                 document: doc,
                 score: null
-            }))
-
-        } catch (error: any) {
-            console.error("❌ Erro no juridicoSpecificQueryTool:", error.message);
-            return []
+            }));
         }
-    },
-    { name: "Juridico Specific Query (Tool)", run_type: "retriever" }
-)
-
-
-
-
-
-
-
-
-
-
-
-
-export { JURIDICO_TOOLS };
-
-
-
+        catch (error) {
+            console.error("❌ Erro no juridicoSpecificQueryTool:", error.message);
+            return [];
+        }
+    });
+}, { name: "Juridico Specific Query (Tool)", run_type: "retriever" });

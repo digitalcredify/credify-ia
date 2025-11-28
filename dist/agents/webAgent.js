@@ -11,7 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runWebAgent = void 0;
 const ingest_data_1 = require("../scripts/ingest-data");
-const planning_1 = require("../planning");
+const planning_1 = require("../plannings/history/planning");
 const dateUtils_1 = require("../utils/dateUtils");
 const runWebAgent = (pergunta, jsonData, targetMonth, onChunk) => __awaiter(void 0, void 0, void 0, function* () {
     try {

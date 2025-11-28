@@ -4,10 +4,7 @@ import { QdrantVectorStore } from "@langchain/qdrant";
 import { qdrantClient, openAiEmbbeding, collectionExists, createCollecion } from "../../config";
 import { traceable } from "langsmith/traceable";
 
-
-
 const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection'
-
 
 export const ingestJuridicoData = traceable(
     async function ingestJuridicoData(fullJson: any, document: string, name: string) {
@@ -32,11 +29,45 @@ export const ingestJuridicoData = traceable(
                 field_name: "metadata.name",
                 field_schema: "keyword"
             });
+
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.status",
+                field_schema: "keyword"
+            });
+
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.grau",
+                field_schema: "keyword"
+            });
+
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.classe",
+                field_schema: "keyword"
+            });
+
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.dataDistribuicao",
+                field_schema: "keyword"
+            });
+
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.area",
+                field_schema: "keyword"
+            });
+
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.tribunal",
+                field_schema: "keyword"
+            });
+
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.uf",
+                field_schema: "keyword"
+            });
+
         } else {
-            console.log(`[Juridico Ingest] 🧹 Verificando e limpando dados antigos para o documento: ${document}...`);
 
             try {
-
                 const searchResult = await qdrantClient.count(QDRANT_JURIDICO_COLLECTION_NAME, {
                     filter: {
                         must: [
@@ -74,13 +105,10 @@ export const ingestJuridicoData = traceable(
 
             } catch (error) {
                 console.error(`[Juridico Ingest] ⚠️ Erro ao tentar limpar dados antigos:`, error);
-
             }
         }
 
-
         const dadosCadastrais = fullJson?.RESPOSTA?.DADOSCADASTRAIS?.[0] || {};
-
         const rawData = fullJson?.RESPOSTA?.DATA || {};
 
         const processes = Object.keys(rawData)
@@ -104,8 +132,6 @@ export const ingestJuridicoData = traceable(
                 })
                 .map(key => obj[key]);
         };
-
-
 
         const getMainParties = (partesObj: any): string => {
             const partesArray = registroObjectToArray(partesObj);
@@ -141,8 +167,6 @@ export const ingestJuridicoData = traceable(
                 })
                 .join("\n\n");
         };
-
-
 
         const getLastDecision = (julgamentosObj: any): string => {
             const julgamentosArray = registroObjectToArray(julgamentosObj);
@@ -181,8 +205,6 @@ export const ingestJuridicoData = traceable(
                 return "Erro ao processar decisões";
             }
         };
-
-
 
         const documents: Document[] = processes.map((proc: any) => {
             const pageContent = `
@@ -224,7 +246,12 @@ export const ingestJuridicoData = traceable(
                     partesCount: partesArray.length,
                     julgamentosCount: julgamentosArray.length,
                     tribunal: proc.TRIBUNAL,
-                    uf: proc.UF
+                    uf: proc.UF,
+                    
+                    status: proc.STATUSPREDICTUS?.STATUSPROCESSO || "N/A",
+                    grau: proc.GRAUPROCESSO || "N/A",
+                    classe: proc.CLASSEPROCESSUAL?.NOME || "N/A",
+                    dataDistribuicao: proc.DATADISTRIBUICAO || "N/A"
                 }
             });
         });
@@ -256,6 +283,7 @@ export const ingestJuridicoData = traceable(
         await vectorStore.addDocuments(documents);
 
         console.log(`[Juridico Ingest] ✅ Sucesso! SessionID: ${sessionId}`);
+        console.log(`[Juridico Ingest] ✅ Documentos ingeridos com metadados completos para filtros dinâmicos`);
 
         return {
             sessionId: sessionId,
