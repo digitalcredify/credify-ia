@@ -7,10 +7,12 @@ import { traceable } from "langsmith/traceable";
 const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection'
 
 export const ingestJuridicoData = traceable(
-    async function ingestJuridicoData(fullJson: any, document: string, name: string) {
+    async function ingestJuridicoData(fullJson: any, document: string, name: string, existingSessionId?: string, isDetailed?: boolean, processId?: string) {
         console.log("⚖️ [Juridico Ingest] Iniciando ingestão...");
 
-        const sessionId = uuidv4();
+        const sessionId = existingSessionId || uuidv4();
+        console.log(`📌 [Juridico Ingest] SessionID: ${sessionId} ${existingSessionId ? '(reutilizado)' : '(novo)'}`);
+
 
         const exists = await collectionExists(QDRANT_JURIDICO_COLLECTION_NAME);
 
@@ -19,6 +21,10 @@ export const ingestJuridicoData = traceable(
 
             await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
                 field_name: "metadata.sessionId",
+                field_schema: "keyword"
+            });
+            await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.processId",
                 field_schema: "keyword"
             });
             await qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
@@ -95,7 +101,7 @@ export const ingestJuridicoData = traceable(
                                 }
                             ]
                         },
-                        wait: true 
+                        wait: true
                     });
 
                     console.log(`[Juridico Ingest] ✅ Limpeza concluída com sucesso.`);
@@ -213,6 +219,7 @@ export const ingestJuridicoData = traceable(
                     - Documento: ${document}
 
                     DETALHES DO PROCESSO:
+                        - ID do Processo: ${processId || proc._ID || "N/A"} 
                         - Número do CNJ: ${proc.NUMEROPROCESSOUNICO || "N/A"} 
                         - Grau do Processo: ${proc.GRAUPROCESSO || "N/A"}
                         - Área: ${proc.AREA || "N/A"}
@@ -228,6 +235,8 @@ export const ingestJuridicoData = traceable(
 
                         DECISÕES DE JULGAMENTOS:
                         ${getAllDecisions(proc.STATUSPREDICTUS?.JULGAMENTOS)}
+
+                        ${isDetailed ? `\n\n⚠️ DADOS DETALHADOS DISPONÍVEIS\n${JSON.stringify(proc, null, 2)}` : ''}
                 `.trim();
 
             const partesArray = registroObjectToArray(proc.PARTES);
@@ -237,17 +246,20 @@ export const ingestJuridicoData = traceable(
                 pageContent: pageContent,
                 metadata: {
                     sessionId: sessionId,
+                    processId: processId || proc._ID,
                     name: name,
                     document: document,
                     processNumber: proc.NUMEROPROCESSOUNICO,
                     area: proc.AREA,
                     value: parseFloat(proc.VALORCAUSA?.VALOR || "0"),
+
                     source: "api_juridica",
+                    isDetailed: isDetailed || false,
                     partesCount: partesArray.length,
                     julgamentosCount: julgamentosArray.length,
                     tribunal: proc.TRIBUNAL,
                     uf: proc.UF,
-                    
+
                     status: proc.STATUSPREDICTUS?.STATUSPROCESSO || "N/A",
                     grau: proc.GRAUPROCESSO || "N/A",
                     classe: proc.CLASSEPROCESSUAL?.NOME || "N/A",
@@ -283,7 +295,6 @@ export const ingestJuridicoData = traceable(
         await vectorStore.addDocuments(documents);
 
         console.log(`[Juridico Ingest] ✅ Sucesso! SessionID: ${sessionId}`);
-        console.log(`[Juridico Ingest] ✅ Documentos ingeridos com metadados completos para filtros dinâmicos`);
 
         return {
             sessionId: sessionId,

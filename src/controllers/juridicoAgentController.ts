@@ -9,6 +9,7 @@ import { Request, Response } from 'express';
 import { ENABLE_STREAMING } from '../config';
 import { ingestJuridicoData } from '../scripts/juridico/ingest-juridico-data';
 import { juridicoAgentService } from '../service/juridicoAgentService';
+import { ingestJuridicoDetailedData } from '../scripts/juridico/ingest-juridico-detailed-data';
 
 
 export const juridicoAgentController = async (req: Request, res: Response) => {
@@ -47,9 +48,9 @@ export const juridicoAgentController = async (req: Request, res: Response) => {
 
             try {
 
-                await juridicoAgentService(pergunta,document,name, chunk)
+                await juridicoAgentService(pergunta, document, name, chunk)
 
-                res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`); // fim do streaming
+                res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`);
                 res.end()
 
             } catch (error) {
@@ -62,25 +63,25 @@ export const juridicoAgentController = async (req: Request, res: Response) => {
             }
 
         }
-        else{
+        else {
             try {
-                const response = await juridicoAgentService(pergunta,document,name);
+                const response = await juridicoAgentService(pergunta, document, name);
 
                 res.status(200).json({
-                    success:true,
-                    response:response
+                    success: true,
+                    response: response
                 })
-                
+
             } catch (error) {
                 console.error("[Juridico Controller] Erro na variável de streaming:", error);
 
-                if(!res.headersSent){
+                if (!res.headersSent) {
                     res.status(500).json({
                         error: error instanceof Error ? error.message : "Erro interno do servidor"
 
                     })
                 }
-                
+
             }
         }
 
@@ -97,7 +98,7 @@ export const juridicoAgentController = async (req: Request, res: Response) => {
 
 export const juridicoIngestController = async (req: Request, res: Response) => {
     try {
-        const { jsonData, document, name } = req.body;
+        const { jsonData, document, name, sessionId, isDetailed } = req.body;
 
         if (!jsonData || !document || !name) {
             return res.status(400).json({
@@ -106,7 +107,7 @@ export const juridicoIngestController = async (req: Request, res: Response) => {
         }
 
 
-        const result = await ingestJuridicoData(jsonData,document,name);
+        const result = await ingestJuridicoData(jsonData, document, name, sessionId, isDetailed);
 
         res.status(200).json({
             success: true,
@@ -123,3 +124,43 @@ export const juridicoIngestController = async (req: Request, res: Response) => {
         });
     }
 };
+
+export const juridicoIngestDetailedController = async (req: Request, res: Response) => {
+
+    try {
+
+        const { jsonData, name, document, sessionId, processId } = req.body
+
+        if (!jsonData || !name || !document || !sessionId || !processId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Campos obrigatórios ausentes'
+            });
+        }
+
+        const result = await ingestJuridicoDetailedData(jsonData, document, name, sessionId, processId)
+
+        console.log(`✅ [API Detailed] Ingestão concluída com sucesso`)
+
+        return res.status(200).json({
+            success: true,
+            sessionId: result.sessionId,
+            processId: result.processId,
+            count: result.count,
+            message: 'Dados detalhados ingeridos com sucesso'
+        });
+
+
+    } catch (error: any) {
+        console.error('❌ [API Detailed] Erro na ingestão:', error);
+
+        return res.status(500).json({
+            success: false,
+            error: 'Erro ao processar ingestão de dados detalhados',
+            details: error.message
+        });
+
+
+    }
+
+}
