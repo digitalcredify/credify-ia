@@ -17,6 +17,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OPENAI_MODEL = exports.QDRANT_COLLECTION_NAME = exports.ENABLE_STREAMING = exports.advancedModel = exports.balancedModel = exports.fastModel = exports.addDocuments = exports.qdrantClient = exports.openAIClient = exports.openAiEmbbeding = exports.qdrantApiKey = exports.qdrantUrl = exports.apiKeyOpenAi = void 0;
+exports.connectMongoDB = connectMongoDB;
+exports.disconnectMongoDB = disconnectMongoDB;
+exports.getDatabase = getDatabase;
 exports.collectionExists = collectionExists;
 exports.createCollecion = createCollecion;
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -24,7 +27,60 @@ const openai_1 = __importDefault(require("openai"));
 const js_client_rest_1 = require("@qdrant/js-client-rest");
 const openai_2 = require("@langchain/openai");
 const traceable_1 = require("langsmith/traceable");
+const mongodb_1 = require("mongodb");
 dotenv_1.default.config();
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'credify_ia';
+if (!MONGODB_URI) {
+    throw new Error('❌ MONGODB_URI não está definida no arquivo .env');
+}
+let mongoClient = null;
+let db = null;
+function connectMongoDB() {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            if (db) {
+                console.log('✅ [MongoDB] Usando conexão existente');
+                return db;
+            }
+            console.log('🔄 [MongoDB] Conectando ao MongoDB...');
+            mongoClient = new mongodb_1.MongoClient(MONGODB_URI);
+            yield mongoClient.connect();
+            db = mongoClient.db(MONGODB_DATABASE);
+            // Testar conexão
+            yield db.admin().ping();
+            console.log(`✅ [MongoDB] Conectado com sucesso ao banco: ${MONGODB_DATABASE}`);
+            return db;
+        }
+        catch (error) {
+            console.error('❌ [MongoDB] Erro ao conectar:', error);
+            throw error;
+        }
+    });
+}
+function disconnectMongoDB() {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            if (mongoClient) {
+                yield mongoClient.close();
+                console.log('✅ [MongoDB] Desconectado com sucesso');
+                mongoClient = null;
+                db = null;
+            }
+        }
+        catch (error) {
+            console.error('❌ [MongoDB] Erro ao desconectar:', error);
+            throw error;
+        }
+    });
+}
+function getDatabase() {
+    if (!db) {
+        throw new Error('❌ MongoDB não está conectado. Chame connectMongoDB() primeiro.');
+    }
+    return db;
+}
+exports.default = db;
 exports.apiKeyOpenAi = process.env.API_KEY;
 exports.qdrantUrl = process.env.QDRANT_URL;
 exports.qdrantApiKey = process.env.QDRANT_API_KEY;

@@ -22,16 +22,18 @@ const Juridicotools_1 = require("../../tools/juridico/Juridicotools");
 const messages_1 = require("@langchain/core/messages");
 const config_1 = require("../../config");
 const createJuridicoFilter = (document, name) => {
-    must: [
-        {
-            key: "metadata.document",
-            match: { value: document }
-        },
-        {
-            key: "metadata.name",
-            match: { value: name }
-        }
-    ];
+    return {
+        must: [
+            {
+                key: "metadata.document",
+                match: { value: document }
+            },
+            {
+                key: "metadata.name",
+                match: { value: name }
+            }
+        ]
+    };
 };
 const selectAndExecuteTools = (0, traceable_1.traceable)(function selectAndExecuteTools(pergunta, document, name) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -140,7 +142,8 @@ const selectAndExecuteTools = (0, traceable_1.traceable)(function selectAndExecu
     });
 });
 function generateResponseOpenAI(messages_2) {
-    return __awaiter(this, arguments, void 0, function* (messages, modelType = "advanced", onChunk) {
+    return __awaiter(this, arguments, void 0, function* (messages, // ← MODIFICADO: de 'any' para 'BaseMessage[]'
+    modelType = "advanced", onChunk) {
         var _a, e_1, _b, _c;
         try {
             const langchainMessages = messages.map((msg) => {
@@ -197,16 +200,29 @@ function generateResponseOpenAI(messages_2) {
         }
     });
 }
-exports.generateJuridicoResponse = (0, traceable_1.traceable)(function generateJuridicoResponse(pergunta, document, name, onChunk) {
+exports.generateJuridicoResponse = (0, traceable_1.traceable)(function generateJuridicoResponse(pergunta, document, name, userId, // ← NOVO
+sessionId, // ← NOVO
+historyManager, // ← NOVO
+onChunk) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             console.log("[Juridico Planning] Gerando resposta para pergunta jurídica...");
+            const conversationHistory = yield historyManager.getHistoryForLLM(userId, sessionId);
+            console.log(`📚 [Juridico Planning] Histórico: ${conversationHistory.length} mensagens`);
             const toolResults = yield selectAndExecuteTools(pergunta, document, name);
             let context = `
                 Documento analisado analisado: ${document}.
                 Nome da empresa: ${name}.
             `;
             context += `\n\n`;
+            if (conversationHistory.length > 0) {
+                context += `## HISTÓRICO DA CONVERSA:\n`;
+                conversationHistory.forEach((msg, index) => {
+                    const role = msg._getType() === 'human' ? 'Usuário' : 'Assistente';
+                    context += `${index + 1}. **${role}**: ${msg.content}\n`;
+                });
+                context += `\n\n`;
+            }
             for (const result of toolResults) {
                 if (result.tool === 'processAnalysis') {
                     context += "=== ANÁLISE DE PROCESSOS ===\n";
@@ -330,6 +346,14 @@ Os dados de partes incluem:
 - Data de Distribuição: Quando o processo foi registrado
 - Valor da Causa: Quanto está em disputa (em reais)
 - Status: Situação atual (Ativo, Encerrado, Suspenso, etc.)
+
+### 3.1 IDENTIFICADORES: USAR APENAS CNJ
+
+**IMPORTANTE:**
+- **Mostrar ao usuário**: Número CNJ (20 dígitos) - ex: 00011654020255190006
+- **NÃO mostrar**: _ID (hash interno) - ex: 520fd37b90ce34c596e4ce9b5f5deb0b78a6beeb8fbd26670edf3940cc248774
+
+O _ID é apenas para uso interno do sistema. Sempre cite o CNJ nas respostas.
 
 **Ao analisar processos:**
 - Cite sempre o número CNJ e tribunal
@@ -474,11 +498,14 @@ Agora responda à pergunta do usuário com base EXCLUSIVAMENTE nos dados forneci
 
 `;
             const messages = [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: pergunta }
+                new messages_1.SystemMessage(systemPrompt),
+                ...conversationHistory, // ← Adicione histórico
+                new messages_1.HumanMessage(pergunta)
             ];
             const response = yield generateResponseOpenAI(messages, "fast", onChunk);
             console.log("[Juridico Planning] Resposta gerada com sucesso");
+            yield historyManager.addMessage(userId, sessionId, 'user', pergunta);
+            yield historyManager.addMessage(userId, sessionId, 'assistant', response);
             return response;
         }
         catch (error) {

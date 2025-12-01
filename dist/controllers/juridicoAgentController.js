@@ -14,23 +14,35 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.juridicoIngestController = exports.juridicoAgentController = void 0;
+exports.juridicoIngestDetailedController = exports.juridicoIngestController = exports.juridicoAgentController = void 0;
 const config_1 = require("../config");
 const ingest_juridico_data_1 = require("../scripts/juridico/ingest-juridico-data");
 const juridicoAgentService_1 = require("../service/juridicoAgentService");
+const ingest_juridico_detailed_data_1 = require("../scripts/juridico/ingest-juridico-detailed-data");
+const chatConversationService_1 = require("../service/chatConversationService");
+const cacheManager_1 = require("../service/cacheManager");
+const conversationHistoryManager_1 = require("../service/conversationHistoryManager");
+const mongoDb = (0, config_1.getDatabase)();
+const mongoService = new chatConversationService_1.ChatConversationService(mongoDb);
+const cacheManager = new cacheManager_1.ConversationCacheManager();
+const historyManager = new conversationHistoryManager_1.ConversationHistoryManager(mongoService, cacheManager);
 const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { pergunta, document, name } = req.body;
-        if (!pergunta || !document || !name) {
+        const { pergunta, document, name, sessionId, userId } = req.body;
+        if (!pergunta || !document || !name || !userId) {
             return res.status(400).json({
-                error: "Campos obrigatórios: pergunta, documento e nome"
+                error: "Campos obrigatórios: pergunta, documento, nome e usuário autenticado"
             });
         }
         console.log(`📝 [Juridico Controller] Pergunta recebida: "${pergunta}"`);
-        console.log(`📄 [Juridico Controller] Documento: ${document}`);
-        console.log(`🏷️ [Juridico Controller] Nome: ${name}`);
-        console.log(`🔄 [Juridico Controller] Streaming: ${config_1.ENABLE_STREAMING ? 'HABILITADO' : 'DESABILITADO'}`);
-        // fluxo com streaming
+        console.log(`🔐 [Juridico Controller] Usuário: ${userId}`);
+        // Se não houver sessionId, criar uma nova conversa
+        let finalSessionId = sessionId;
+        if (!finalSessionId) {
+            finalSessionId = yield mongoService.createConversation(userId, document, name);
+            console.log(`✨ [Juridico Controller] Nova conversa criada: ${finalSessionId}`);
+        }
+        // Fluxo com streaming
         if (config_1.ENABLE_STREAMING) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
@@ -44,8 +56,11 @@ const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, 
                 res.write(sseMessage);
             };
             try {
-                yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name, chunk);
-                res.write(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`); // fim do streaming
+                yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name, userId, // ← NOVO
+                finalSessionId, // ← NOVO
+                historyManager, // ← NOVO
+                chunk);
+                res.write(`data: ${JSON.stringify({ done: true, fullResponse, sessionId: finalSessionId })}\n\n`);
                 res.end();
             }
             catch (error) {
@@ -57,10 +72,14 @@ const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, 
         }
         else {
             try {
-                const response = yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name);
+                const response = yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name, userId, // ← NOVO
+                finalSessionId, // ← NOVO
+                historyManager // ← NOVO
+                );
                 res.status(200).json({
                     success: true,
-                    response: response
+                    response: response,
+                    sessionId: finalSessionId
                 });
             }
             catch (error) {
@@ -85,13 +104,13 @@ const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, 
 exports.juridicoAgentController = juridicoAgentController;
 const juridicoIngestController = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { jsonData, document, name } = req.body;
+        const { jsonData, document, name, sessionId, isDetailed } = req.body;
         if (!jsonData || !document || !name) {
             return res.status(400).json({
                 error: "JSON ou documento ou pergunta é obrigatório."
             });
         }
-        const result = yield (0, ingest_juridico_data_1.ingestJuridicoData)(jsonData, document, name);
+        const result = yield (0, ingest_juridico_data_1.ingestJuridicoData)(jsonData, document, name, sessionId, isDetailed);
         res.status(200).json({
             success: true,
             sessionId: result.sessionId,
@@ -108,3 +127,32 @@ const juridicoIngestController = (req, res) => __awaiter(void 0, void 0, void 0,
     }
 });
 exports.juridicoIngestController = juridicoIngestController;
+const juridicoIngestDetailedController = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { jsonData, name, document, sessionId, processId } = req.body;
+        if (!jsonData || !name || !document || !sessionId || !processId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Campos obrigatórios ausentes'
+            });
+        }
+        const result = yield (0, ingest_juridico_detailed_data_1.ingestJuridicoDetailedData)(jsonData, document, name, sessionId, processId);
+        console.log(`✅ [API Detailed] Ingestão concluída com sucesso`);
+        return res.status(200).json({
+            success: true,
+            sessionId: result.sessionId,
+            processId: result.processId,
+            count: result.count,
+            message: 'Dados detalhados ingeridos com sucesso'
+        });
+    }
+    catch (error) {
+        console.error('❌ [API Detailed] Erro na ingestão:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Erro ao processar ingestão de dados detalhados',
+            details: error.message
+        });
+    }
+});
+exports.juridicoIngestDetailedController = juridicoIngestDetailedController;

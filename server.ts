@@ -9,6 +9,7 @@ import agent from './src/routes/agentRoute';
 import operationAgent from './src/routes/operationAgentRoute';
 import { clearAllChatHistory } from './src/memory';
 import juridicoAgentRoute from './src/routes/juridicoAgentRoute';
+import { connectMongoDB } from './src/config';
 
 
 const app = express();
@@ -24,6 +25,8 @@ app.use('/api', juridicoAgentRoute);
 async function startServer() {
     try {
         console.log("🔄 Iniciando aplicação...");
+
+         await connectMongoDB();  
 
         await clearAllChatHistory(); // limpa o histórico ao iniciar
 

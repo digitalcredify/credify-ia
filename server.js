@@ -22,6 +22,7 @@ const agentRoute_1 = __importDefault(require("./src/routes/agentRoute"));
 const operationAgentRoute_1 = __importDefault(require("./src/routes/operationAgentRoute"));
 const memory_1 = require("./src/memory");
 const juridicoAgentRoute_1 = __importDefault(require("./src/routes/juridicoAgentRoute"));
+const config_1 = require("./config");
 const app = (0, express_1.default)();
 const PORT = 3080;
 app.use((0, cors_1.default)());
@@ -34,6 +35,7 @@ function startServer() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             console.log("🔄 Iniciando aplicação...");
+            yield (0, config_1.connectMongoDB)();
             yield (0, memory_1.clearAllChatHistory)(); // limpa o histórico ao iniciar
             app.listen(PORT, () => {
                 console.log(`🚀 Servidor rodando na porta ${PORT}`);

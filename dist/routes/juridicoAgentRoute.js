@@ -8,4 +8,5 @@ const juridicoAgentController_1 = require("../controllers/juridicoAgentControlle
 const router = express_1.default.Router();
 router.post('/juridico-ingest', juridicoAgentController_1.juridicoIngestController);
 router.post('/juridico-chat', juridicoAgentController_1.juridicoAgentController);
+router.post('/juridico-ingest-detailed', juridicoAgentController_1.juridicoIngestDetailedController);
 exports.default = router;

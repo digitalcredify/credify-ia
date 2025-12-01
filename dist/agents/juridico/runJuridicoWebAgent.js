@@ -11,10 +11,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runJuridicoWebAgent = void 0;
 const juridicoPlanning_1 = require("../../plannings/juridico/juridicoPlanning");
-const runJuridicoWebAgent = (pergunta, document, name, onChunk) => __awaiter(void 0, void 0, void 0, function* () {
+const runJuridicoWebAgent = (pergunta, document, name, userId, // ← NOVO
+sessionId, // ← NOVO
+historyManager, // ← NOVO
+onChunk) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log("[Juridico Web Agent] Iniciando processamento com dados jurídicos...");
-        const response = yield (0, juridicoPlanning_1.generateJuridicoResponse)(pergunta, document, name, onChunk);
+        const response = yield (0, juridicoPlanning_1.generateJuridicoResponse)(pergunta, document, name, userId, // ← NOVO
+        sessionId, // ← NOVO
+        historyManager, // ← NOVO
+        onChunk);
         return response;
     }
     catch (error) {

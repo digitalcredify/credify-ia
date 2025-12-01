@@ -219,8 +219,8 @@ export const ingestJuridicoData = traceable(
                     - Documento: ${document}
 
                     DETALHES DO PROCESSO:
-                        - ID do Processo: ${processId || proc._ID || "N/A"} 
                         - Número do CNJ: ${proc.NUMEROPROCESSOUNICO || "N/A"} 
+                        - ID do Processo: ${processId || proc._ID || "N/A"} 
                         - Grau do Processo: ${proc.GRAUPROCESSO || "N/A"}
                         - Área: ${proc.AREA || "N/A"}
                         - Tribunal: ${proc.TRIBUNAL || "N/A"} 
@@ -246,10 +246,10 @@ export const ingestJuridicoData = traceable(
                 pageContent: pageContent,
                 metadata: {
                     sessionId: sessionId,
+                    processNumber: proc.NUMEROPROCESSOUNICO,
                     processId: processId || proc._ID,
                     name: name,
                     document: document,
-                    processNumber: proc.NUMEROPROCESSOUNICO,
                     area: proc.AREA,
                     value: parseFloat(proc.VALORCAUSA?.VALOR || "0"),
 

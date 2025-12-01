@@ -10,12 +10,77 @@ import { ChatOpenAI, OpenAIEmbeddings } from "@langchain/openai";
 import { traceable } from "langsmith/traceable";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { Document } from "@langchain/core/documents";
+import { Db, MongoClient } from 'mongodb';
 
 
 
 
 
 dotenv.config();
+
+
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'credify_ia';
+
+
+if (!MONGODB_URI) {
+    throw new Error('❌ MONGODB_URI não está definida no arquivo .env');
+}
+
+let mongoClient: MongoClient | null = null;
+let db: Db | null = null;
+
+export async function connectMongoDB(): Promise<Db> {
+    try {
+        if (db) {
+            console.log('✅ [MongoDB] Usando conexão existente');
+            return db;
+        }
+
+        console.log('🔄 [MongoDB] Conectando ao MongoDB...');
+        
+        mongoClient = new MongoClient(MONGODB_URI);
+        await mongoClient.connect();
+        
+        db = mongoClient.db(MONGODB_DATABASE);
+        
+        // Testar conexão
+        await db.admin().ping();
+        
+        console.log(`✅ [MongoDB] Conectado com sucesso ao banco: ${MONGODB_DATABASE}`);
+        
+        return db;
+    } catch (error) {
+        console.error('❌ [MongoDB] Erro ao conectar:', error);
+        throw error;
+    }
+}
+
+export async function disconnectMongoDB(): Promise<void> {
+    try {
+        if (mongoClient) {
+            await mongoClient.close();
+            console.log('✅ [MongoDB] Desconectado com sucesso');
+            mongoClient = null;
+            db = null;
+        }
+    } catch (error) {
+        console.error('❌ [MongoDB] Erro ao desconectar:', error);
+        throw error;
+    }
+}
+
+export function getDatabase(): Db {
+    if (!db) {
+        throw new Error('❌ MongoDB não está conectado. Chame connectMongoDB() primeiro.');
+    }
+    return db;
+}
+
+export default db;
+
+
+
 
 export const apiKeyOpenAi = process.env.API_KEY;
 export const qdrantUrl = process.env.QDRANT_URL;

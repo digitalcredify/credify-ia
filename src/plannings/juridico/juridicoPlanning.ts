@@ -1,32 +1,34 @@
 import { traceable } from "langsmith/traceable";
-import { juridicoComparativeAnalysisTool, 
-    juridicoDecisionsAnalysisTool, 
-    juridicoPartiesAnalysisTool, 
-    juridicoProcessAnalysisTool, 
-    juridicoSpecificQueryTool, 
-    juridicoTargetProfileAnalysisTool, 
-    juridicoTimelineAnalysisTool, 
-    runJuridicoToolRoutingAgent } from "../../tools/juridico/Juridicotools";
+import {
+    juridicoComparativeAnalysisTool,
+    juridicoDecisionsAnalysisTool,
+    juridicoPartiesAnalysisTool,
+    juridicoProcessAnalysisTool,
+    juridicoSpecificQueryTool,
+    juridicoTargetProfileAnalysisTool,
+    juridicoTimelineAnalysisTool,
+    runJuridicoToolRoutingAgent
+} from "../../tools/juridico/Juridicotools";
 import { content } from "pdfkit/js/page";
-import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
+import { SystemMessage, HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import { advancedModel, balancedModel, fastModel } from "../../config";
 import { match } from "assert";
+import { ConversationHistoryManager } from "../../service/conversationHistoryManager";
 
 
-const createJuridicoFilter = (document:string, name:string,) => {
-
-    must: [
-        {
-            key: "metadata.document",
-            match: {value: document}
-        },
-        {
-            key:"metadata.name",
-            match: {value: name}
-        }
-    ]
-
-
+const createJuridicoFilter = (document: string, name: string,) => {
+    return {
+        must: [
+            {
+                key: "metadata.document",
+                match: { value: document }
+            },
+            {
+                key: "metadata.name",
+                match: { value: name }
+            }
+        ]
+    }
 }
 
 const selectAndExecuteTools = traceable(
@@ -39,7 +41,7 @@ const selectAndExecuteTools = traceable(
 
         const tool = await runJuridicoToolRoutingAgent(pergunta, document, name)
 
-        const qdrantFilter = createJuridicoFilter(document,name)
+        const qdrantFilter = createJuridicoFilter(document, name)
 
         const results: any[] = []
 
@@ -49,7 +51,7 @@ const selectAndExecuteTools = traceable(
 
             const resultPartiesAnalysis = await juridicoPartiesAnalysisTool({
                 query: pergunta,
-                filters:qdrantFilter
+                filters: qdrantFilter
             })
 
             results.push({
@@ -133,7 +135,7 @@ const selectAndExecuteTools = traceable(
             })
         }
 
-         // ==================== TIMELINE ANALYSIS ====================
+        // ==================== TIMELINE ANALYSIS ====================
         if (tool.tool === 'timelineAnalysis') {
             console.log('[Juridico Planning] Usando TimelineAnalysis')
 
@@ -171,7 +173,7 @@ const selectAndExecuteTools = traceable(
 )
 
 async function generateResponseOpenAI(
-    messages: any,
+    messages: BaseMessage[],  // ← MODIFICADO: de 'any' para 'BaseMessage[]'
     modelType: "advanced" | "balanced" | "fast" = "advanced",
     onChunk?: (chunk: string) => void
 ): Promise<string> {
@@ -223,10 +225,19 @@ export const generateJuridicoResponse = traceable(
         pergunta: string,
         document: string,
         name: string,
+        userId: string,  // ← NOVO
+        sessionId: string,  // ← NOVO
+        historyManager: ConversationHistoryManager,  // ← NOVO
         onChunk?: (chunk: string) => void
     ): Promise<string> {
         try {
             console.log("[Juridico Planning] Gerando resposta para pergunta jurídica...");
+
+            const conversationHistory = await historyManager.getHistoryForLLM(
+                userId,
+                sessionId
+            );
+            console.log(`📚 [Juridico Planning] Histórico: ${conversationHistory.length} mensagens`);
 
             const toolResults = await selectAndExecuteTools(pergunta, document, name);
 
@@ -234,11 +245,19 @@ export const generateJuridicoResponse = traceable(
                 Documento analisado analisado: ${document}.
                 Nome da empresa: ${name}.
             `
-           
 
             context += `\n\n`;
 
-             for (const result of toolResults) {
+            if (conversationHistory.length > 0) {
+                context += `## HISTÓRICO DA CONVERSA:\n`;
+                conversationHistory.forEach((msg, index) => {
+                    const role = msg._getType() === 'human' ? 'Usuário' : 'Assistente';
+                    context += `${index + 1}. **${role}**: ${msg.content}\n`;
+                });
+                context += `\n\n`;
+            }
+
+            for (const result of toolResults) {
 
                 if (result.tool === 'processAnalysis') {
                     context += "=== ANÁLISE DE PROCESSOS ===\n";
@@ -261,7 +280,7 @@ export const generateJuridicoResponse = traceable(
                 if (result.tool === 'riskAnalysis') {
                     context += "=== ANÁLISE DE RISCO ===\n";
                     context += "Métricas de risco e exposição:\n";
-                    
+
                     // Extrai métricas de risco se disponível
                     if (result.data && result.data.length > 0 && result.data[0].riskMetrics) {
                         context += JSON.stringify(result.data[0].riskMetrics, null, 2) + "\n\n";
@@ -273,7 +292,7 @@ export const generateJuridicoResponse = traceable(
                 if (result.tool === 'comparativeAnalysis') {
                     context += "=== ANÁLISE COMPARATIVA ===\n";
                     context += "Distribuição de processos por tribunal, área, UF e classe:\n";
-                    
+
                     if (result.data && result.data.length > 0 && result.data[0].comparativeMetrics) {
                         context += JSON.stringify(result.data[0].comparativeMetrics, null, 2) + "\n\n";
                     } else {
@@ -284,7 +303,7 @@ export const generateJuridicoResponse = traceable(
                 if (result.tool === 'targetProfileAnalysis') {
                     context += "=== ANÁLISE DE PERFIL ===\n";
                     context += "Perfil do alvo e padrão de envolvimento em processos:\n";
-                    
+
                     if (result.data && result.data.length > 0 && result.data[0].profileMetrics) {
                         context += JSON.stringify(result.data[0].profileMetrics, null, 2) + "\n\n";
                     } else {
@@ -295,7 +314,7 @@ export const generateJuridicoResponse = traceable(
                 if (result.tool === 'timelineAnalysis') {
                     context += "=== ANÁLISE TEMPORAL ===\n";
                     context += "Evolução temporal dos processos:\n";
-                    
+
                     if (result.data && result.data.length > 0 && result.data[0].timelineMetrics) {
                         context += JSON.stringify(result.data[0].timelineMetrics, null, 2) + "\n\n";
                     } else {
@@ -370,6 +389,14 @@ Os dados de partes incluem:
 - Data de Distribuição: Quando o processo foi registrado
 - Valor da Causa: Quanto está em disputa (em reais)
 - Status: Situação atual (Ativo, Encerrado, Suspenso, etc.)
+
+### 3.1 IDENTIFICADORES: USAR APENAS CNJ
+
+**IMPORTANTE:**
+- **Mostrar ao usuário**: Número CNJ (20 dígitos) - ex: 00011654020255190006
+- **NÃO mostrar**: _ID (hash interno) - ex: 520fd37b90ce34c596e4ce9b5f5deb0b78a6beeb8fbd26670edf3940cc248774
+
+O _ID é apenas para uso interno do sistema. Sempre cite o CNJ nas respostas.
 
 **Ao analisar processos:**
 - Cite sempre o número CNJ e tribunal
@@ -515,14 +542,18 @@ Agora responda à pergunta do usuário com base EXCLUSIVAMENTE nos dados forneci
 `;
 
 
-            const messages = [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: pergunta }
+             const messages: BaseMessage[] = [
+                new SystemMessage(systemPrompt),
+                ...conversationHistory,  // ← Adicione histórico
+                new HumanMessage(pergunta)
             ]
 
             const response = await generateResponseOpenAI(messages, "fast", onChunk)
 
             console.log("[Juridico Planning] Resposta gerada com sucesso")
+
+            await historyManager.addMessage(userId, sessionId, 'user', pergunta);
+            await historyManager.addMessage(userId, sessionId, 'assistant', response);
 
             return response
 

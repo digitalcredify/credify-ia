@@ -16,16 +16,21 @@ const qdrant_1 = require("@langchain/qdrant");
 const config_1 = require("../../config");
 const traceable_1 = require("langsmith/traceable");
 const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection';
-exports.ingestJuridicoData = (0, traceable_1.traceable)(function ingestJuridicoData(fullJson, document, name) {
+exports.ingestJuridicoData = (0, traceable_1.traceable)(function ingestJuridicoData(fullJson, document, name, existingSessionId, isDetailed, processId) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a, _b, _c;
         console.log("⚖️ [Juridico Ingest] Iniciando ingestão...");
-        const sessionId = (0, uuid_1.v4)();
+        const sessionId = existingSessionId || (0, uuid_1.v4)();
+        console.log(`📌 [Juridico Ingest] SessionID: ${sessionId} ${existingSessionId ? '(reutilizado)' : '(novo)'}`);
         const exists = yield (0, config_1.collectionExists)(QDRANT_JURIDICO_COLLECTION_NAME);
         if (!exists) {
             yield (0, config_1.createCollecion)(QDRANT_JURIDICO_COLLECTION_NAME);
             yield config_1.qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
                 field_name: "metadata.sessionId",
+                field_schema: "keyword"
+            });
+            yield config_1.qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
+                field_name: "metadata.processId",
                 field_schema: "keyword"
             });
             yield config_1.qdrantClient.createPayloadIndex(QDRANT_JURIDICO_COLLECTION_NAME, {
@@ -191,6 +196,7 @@ exports.ingestJuridicoData = (0, traceable_1.traceable)(function ingestJuridicoD
 
                     DETALHES DO PROCESSO:
                         - Número do CNJ: ${proc.NUMEROPROCESSOUNICO || "N/A"} 
+                        - ID do Processo: ${processId || proc._ID || "N/A"} 
                         - Grau do Processo: ${proc.GRAUPROCESSO || "N/A"}
                         - Área: ${proc.AREA || "N/A"}
                         - Tribunal: ${proc.TRIBUNAL || "N/A"} 
@@ -205,6 +211,8 @@ exports.ingestJuridicoData = (0, traceable_1.traceable)(function ingestJuridicoD
 
                         DECISÕES DE JULGAMENTOS:
                         ${getAllDecisions((_d = proc.STATUSPREDICTUS) === null || _d === void 0 ? void 0 : _d.JULGAMENTOS)}
+
+                        ${isDetailed ? `\n\n⚠️ DADOS DETALHADOS DISPONÍVEIS\n${JSON.stringify(proc, null, 2)}` : ''}
                 `.trim();
             const partesArray = registroObjectToArray(proc.PARTES);
             const julgamentosArray = registroObjectToArray((_e = proc.STATUSPREDICTUS) === null || _e === void 0 ? void 0 : _e.JULGAMENTOS);
@@ -212,12 +220,14 @@ exports.ingestJuridicoData = (0, traceable_1.traceable)(function ingestJuridicoD
                 pageContent: pageContent,
                 metadata: {
                     sessionId: sessionId,
+                    processNumber: proc.NUMEROPROCESSOUNICO,
+                    processId: processId || proc._ID,
                     name: name,
                     document: document,
-                    processNumber: proc.NUMEROPROCESSOUNICO,
                     area: proc.AREA,
                     value: parseFloat(((_f = proc.VALORCAUSA) === null || _f === void 0 ? void 0 : _f.VALOR) || "0"),
                     source: "api_juridica",
+                    isDetailed: isDetailed || false,
                     partesCount: partesArray.length,
                     julgamentosCount: julgamentosArray.length,
                     tribunal: proc.TRIBUNAL,
@@ -251,7 +261,6 @@ exports.ingestJuridicoData = (0, traceable_1.traceable)(function ingestJuridicoD
         });
         yield vectorStore.addDocuments(documents);
         console.log(`[Juridico Ingest] ✅ Sucesso! SessionID: ${sessionId}`);
-        console.log(`[Juridico Ingest] ✅ Documentos ingeridos com metadados completos para filtros dinâmicos`);
         return {
             sessionId: sessionId,
             count: documents.length
