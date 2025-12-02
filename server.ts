@@ -28,7 +28,7 @@ async function startServer() {
 
          await connectMongoDB();  
 
-        await clearAllChatHistory(); // limpa o histórico ao iniciar
+        await clearAllChatHistory(); 
 
         app.listen(PORT, () => {
             console.log(`🚀 Servidor rodando na porta ${PORT}`);

@@ -1,11 +1,10 @@
-// src/services/cacheManager.ts
 
 import { BaseMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
 
 interface ConversationCache {
     userId: string;
     sessionId: string;
-    messages: BaseMessage[];  // ✅ Corrigido
+    messages: BaseMessage[]; 
     lastUpdated: Date;
     expiresAt: Date;
 }
@@ -15,25 +14,19 @@ export class ConversationCacheManager {
     private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutos
     private readonly MAX_MESSAGES_IN_CACHE = 20;
     
-    /**
-     * Gera chave de cache
-     */
+  
     private getCacheKey(userId: string, sessionId: string): string {
         return `${userId}:${sessionId}`;
     }
-    
-    /**
-     * Armazena conversa em cache
-     */
+
     setConversation(
         userId: string,
         sessionId: string,
-        messages: BaseMessage[]  // ✅ Corrigido
+        messages: BaseMessage[]  
     ): void {
         const key = this.getCacheKey(userId, sessionId);
         const now = new Date();
         
-        // Manter apenas as últimas N mensagens em cache
         const cachedMessages = messages.slice(-this.MAX_MESSAGES_IN_CACHE);
         
         this.cache.set(key, {
@@ -47,10 +40,7 @@ export class ConversationCacheManager {
         console.log(`✅ [Cache] Conversa em cache: ${key} (${cachedMessages.length} mensagens)`);
     }
     
-    /**
-     * Recupera conversa do cache
-     */
-    getConversation(userId: string, sessionId: string): BaseMessage[] | null {  // ✅ Corrigido
+    getConversation(userId: string, sessionId: string): BaseMessage[] | null {  
         const key = this.getCacheKey(userId, sessionId);
         const cached = this.cache.get(key);
         
@@ -58,7 +48,6 @@ export class ConversationCacheManager {
             return null;
         }
         
-        // Verificar se expirou
         if (new Date() > cached.expiresAt) {
             this.cache.delete(key);
             console.log(`🗑️ [Cache] Conversa expirada: ${key}`);
@@ -69,13 +58,11 @@ export class ConversationCacheManager {
         return cached.messages;
     }
     
-    /**
-     * Adiciona mensagem ao cache
-     */
+  
     addMessageToCache(
         userId: string,
         sessionId: string,
-        message: BaseMessage  // ✅ Corrigido
+        message: BaseMessage 
     ): void {
         const key = this.getCacheKey(userId, sessionId);
         const cached = this.cache.get(key);
@@ -87,7 +74,6 @@ export class ConversationCacheManager {
         
         cached.messages.push(message);
         
-        // Manter limite de mensagens
         if (cached.messages.length > this.MAX_MESSAGES_IN_CACHE) {
             cached.messages = cached.messages.slice(-this.MAX_MESSAGES_IN_CACHE);
         }
@@ -96,18 +82,14 @@ export class ConversationCacheManager {
         cached.expiresAt = new Date(Date.now() + this.CACHE_TTL);
     }
     
-    /**
-     * Limpa cache de uma conversa
-     */
+  
     clearConversation(userId: string, sessionId: string): void {
         const key = this.getCacheKey(userId, sessionId);
         this.cache.delete(key);
         console.log(`🗑️ [Cache] Conversa limpa: ${key}`);
     }
     
-    /**
-     * Limpa todo o cache (executar periodicamente)
-     */
+   
     clearExpiredCache(): number {
         let cleared = 0;
         const now = new Date();
@@ -123,9 +105,7 @@ export class ConversationCacheManager {
         return cleared;
     }
     
-    /**
-     * Retorna estatísticas do cache
-     */
+    
     getStats() {
         return {
             totalConversations: this.cache.size,
@@ -137,5 +117,4 @@ export class ConversationCacheManager {
     }
 }
 
-// Instância global
 export const cacheManager = new ConversationCacheManager();

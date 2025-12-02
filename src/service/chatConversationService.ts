@@ -37,34 +37,109 @@ export class ChatConversationService {
         this.db = db;
         this.collection = db.collection(this.COLLECTION_NAME);
     }
-    
-    /**
-     * Inicializa os índices da collection
+
+        /**
+     * Verifica se uma conversa existe
      */
+    async conversationExists(userId: string, sessionId: string): Promise<boolean> {
+        try {
+            const conversation = await this.collection.findOne(
+                { userId, sessionId },
+                { projection: { _id: 1 } }
+            );
+            return !!conversation;
+        } catch (error) {
+            console.error('[ChatConversationService] Erro ao verificar conversa:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Cria uma conversa com sessionId específico (gerado pelo frontend)
+     */
+    async createOrGetConversation(
+        userId: string,
+        sessionId: string,
+        document: string,
+        name: string,
+        metadata?: any
+    ): Promise<{ sessionId: string; isNew: boolean }> {
+        try {
+            
+            const exists = await this.conversationExists(userId, sessionId);
+            
+            if (exists) {
+                console.log(`♻️ [ChatConversationService] Conversa já existe: ${sessionId}`);
+                return { sessionId, isNew: false };
+            }
+            
+            
+            const now = new Date();
+            const expiresAt = new Date(
+                now.getTime() + this.CONVERSATION_TTL_DAYS * 24 * 60 * 60 * 1000
+            );
+            
+            const conversation: ChatConversation = {
+                userId,
+                sessionId,
+                document,
+                name,
+                messages: [],
+                createdAt: now,
+                updatedAt: now,
+                expiresAt,
+                metadata
+            };
+            
+            console.log(`\n[ChatConversationService] Criando nova conversa...`);
+            console.log(`   userId: ${userId}`);
+            console.log(`   sessionId: ${sessionId}`);
+            console.log(`   document: ${document}`);
+            console.log(`   name: ${name}`);
+            
+            const result = await this.collection.insertOne(conversation as any);
+            
+            console.log(`✅ [ChatConversationService] Conversa criada com sucesso`);
+            console.log(`   MongoDB _id: ${result.insertedId}`);
+            console.log(`   sessionId: ${sessionId}\n`);
+            
+            return { sessionId, isNew: true };
+        } catch (error: any) {
+            if (error.code === 11000) {
+                
+                console.warn(`⚠️ [ChatConversationService] Conversa foi criada por outro processo`);
+                return { sessionId, isNew: false };
+            }
+            console.error('[ChatConversationService] Erro ao criar/obter conversa:', error);
+            throw error;
+        }
+    }
+    
+  
     async initializeIndexes(): Promise<void> {
         try {
             console.log('[ChatConversationService] Criando índices...');
             
-            // Índice composto: userId + sessionId (ÚNICO)
+            
             await this.collection.createIndex(
                 { userId: 1, sessionId: 1 },
                 { unique: true }
             );
             console.log('✅ Índice único criado: { userId, sessionId }');
             
-            // Índice para buscar conversas de um usuário ordenadas por data
+            
             await this.collection.createIndex(
                 { userId: 1, createdAt: -1 }
             );
             console.log('✅ Índice criado: { userId, createdAt }');
             
-            // Índice para buscar por sessionId
+            
             await this.collection.createIndex(
                 { sessionId: 1 }
             );
             console.log('✅ Índice criado: { sessionId }');
             
-            // Índice TTL: Expira conversas após 90 dias
+            
             await this.collection.createIndex(
                 { expiresAt: 1 },
                 { expireAfterSeconds: 0 }
@@ -74,7 +149,7 @@ export class ChatConversationService {
             console.log('[ChatConversationService] Índices criados com sucesso');
         } catch (error: any) {
             if (error.code === 85) {
-                // Índice já existe com diferentes opções
+                
                 console.warn('[ChatConversationService] ⚠️ Índices já existem');
             } else {
                 throw error;
@@ -89,7 +164,7 @@ export class ChatConversationService {
         let attempts = 0;
         const MAX_ATTEMPTS = 5;
         
-        // Tenta gerar um UUID que não exista
+        
         while (exists && attempts < MAX_ATTEMPTS) {
             sessionId = uuidv4();
             const found = await this.collection.findOne({ sessionId });
@@ -104,9 +179,7 @@ export class ChatConversationService {
         return sessionId;
     }
     
-    /**
-     * Cria uma nova conversa
-     */
+   
     async createConversation(
         userId: string,
         document: string,
@@ -132,17 +205,21 @@ export class ChatConversationService {
                 metadata
             };
             
+            console.log(`\n[ChatConversationService] Criando nova conversa...`);
+            console.log(`   userId: ${userId}`);
+            console.log(`   sessionId: ${sessionId}`);
+            console.log(`   document: ${document}`);
+            console.log(`   name: ${name}`);
+            
             const result = await this.collection.insertOne(conversation as any);
             
-            console.log(`✅ [ChatConversationService] Conversa criada: ${sessionId}`);
-            console.log(`   Usuário: ${userId}`);
-            console.log(`   Documento: ${document}`);
-            console.log(`   Nome: ${name}`);
+            console.log(`✅ [ChatConversationService] Conversa criada com sucesso`);
+            console.log(`   MongoDB _id: ${result.insertedId}`);
+            console.log(`   sessionId: ${sessionId}\n`);
             
             return sessionId;
         } catch (error: any) {
             if (error.code === 11000) {
-                // Duplicata de índice único, tenta novamente
                 console.warn(`⚠️ [ChatConversationService] Duplicata detectada, tentando novamente...`);
                 return this.createConversation(userId, document, name, metadata);
             }
@@ -150,10 +227,7 @@ export class ChatConversationService {
             throw error;
         }
     }
-    
-    /**
-     * Adiciona uma mensagem à conversa
-     */
+ 
     async addMessage(
         userId: string,
         sessionId: string,
@@ -188,35 +262,39 @@ export class ChatConversationService {
         }
     }
     
-    /**
-     * Recupera o histórico de uma conversa
-     */
+
     async getConversationHistory(
         userId: string,
         sessionId: string
     ): Promise<ChatMessage[]> {
         try {
+            console.log(`\n[ChatConversationService] Buscando histórico...`);
+            console.log(`   userId: ${userId}`);
+            console.log(`   sessionId: ${sessionId}`);
+            
             const conversation = await this.collection.findOne(
                 { userId, sessionId },
-                { projection: { messages: 1 } }
+                { projection: { messages: 1, _id: 1, createdAt: 1 } }
             );
             
             if (!conversation) {
-                console.warn(`⚠️ [ChatConversationService] Conversa não encontrada: ${sessionId}`);
+                console.warn(`⚠️ [ChatConversationService] Conversa NÃO encontrada no MongoDB`);
+                console.warn(`   Filtro usado: { userId: "${userId}", sessionId: "${sessionId}" }`);
                 return [];
             }
             
-            console.log(`✅ [ChatConversationService] Histórico recuperado: ${conversation.messages?.length || 0} mensagens`);
+            const messageCount = conversation.messages?.length || 0;
+            console.log(`✅ [ChatConversationService] Conversa encontrada`);
+            console.log(`   Criada em: ${conversation.createdAt}`);
+            console.log(`   Mensagens: ${messageCount}`);
+            
             return conversation.messages || [];
         } catch (error) {
             console.error('[ChatConversationService] Erro ao recuperar histórico:', error);
             throw error;
         }
     }
-    
-    /**
-     * Recupera todas as conversas de um usuário
-     */
+ 
     async getUserConversations(
         userId: string,
         limit: number = 50
@@ -244,9 +322,7 @@ export class ChatConversationService {
         }
     }
     
-    /**
-     * Recupera uma conversa completa
-     */
+   
     async getConversation(
         userId: string,
         sessionId: string
@@ -270,9 +346,7 @@ export class ChatConversationService {
         }
     }
     
-    /**
-     * Deleta uma conversa
-     */
+  
     async deleteConversation(userId: string, sessionId: string): Promise<void> {
         try {
             const result = await this.collection.deleteOne({
@@ -291,9 +365,7 @@ export class ChatConversationService {
         }
     }
     
-    /**
-     * Atualiza metadados de uma conversa
-     */
+    
     async updateConversationMetadata(
         userId: string,
         sessionId: string,
@@ -321,9 +393,7 @@ export class ChatConversationService {
         }
     }
     
-    /**
-     * Limpa conversas expiradas (pode ser rodado via cron)
-     */
+
     async cleanupExpiredConversations(): Promise<number> {
         try {
             const result = await this.collection.deleteMany({
@@ -338,9 +408,7 @@ export class ChatConversationService {
         }
     }
     
-    /**
-     * Recupera estatísticas de conversas
-     */
+
     async getStatistics(): Promise<any> {
         try {
             const stats = await this.collection.aggregate([
@@ -380,9 +448,7 @@ export class ChatConversationService {
         }
     }
     
-    /**
-     * Recupera conversas de um usuário por período
-     */
+ 
     async getConversationsByDateRange(
         userId: string,
         startDate: Date,
@@ -408,9 +474,7 @@ export class ChatConversationService {
         }
     }
     
-    /**
-     * Exporta conversa em formato JSON
-     */
+   
     async exportConversation(
         userId: string,
         sessionId: string

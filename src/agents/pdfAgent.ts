@@ -1,20 +1,44 @@
-import { retrieverSessionHistory } from "../memory";
-import { OPENAI_MODEL, openAIClient } from "../config";
+import { getDatabase, OPENAI_MODEL, openAIClient } from "../config";
 import { generatePdfFromHtml } from "../utils/pdfGenerator";
+import { ChatConversationService } from "../service/chatConversationService";
 
-export async function runPdfAgent(sessionId: string, userInput: string) {
+export async function runPdfAgent(
+    sessionId: string, 
+    userId: string,
+    userInput: string
+) {
     
     try {
-        console.log("[PDF Agent] MongoDB pronto para uso.");
+        console.log("[PDF Agent] Iniciando geração de PDF...");
+        console.log(`   sessionId: ${sessionId}`);
+        console.log(`   userId: ${userId}`);
         
-        const sessionHistory = await retrieverSessionHistory(sessionId);
+        // Recuperar histórico do MongoDB
+        const mongoDb = getDatabase();
+        const conversationService = new ChatConversationService(mongoDb);
         
+        const sessionHistory = await conversationService.getConversationHistory(
+            userId,
+            sessionId
+        );
+        
+        if (!sessionHistory || sessionHistory.length === 0) {
+            console.warn("[PDF Agent] Nenhum histórico encontrado");
+            return {
+                error: true,
+                message: "Não encontrei histórico de conversa para gerar o PDF."
+            };
+        }
+        
+        console.log(`[PDF Agent] Histórico recuperado: ${sessionHistory.length} mensagens`);
+        
+        // Encontrar o melhor relatório
         const lastReport = findLastReport(sessionHistory);
         
         if (!lastReport) {
             return {
                 error: true,
-                message: "Não encontrei nenhum relatório anterior."
+                message: "Não encontrei nenhum relatório anterior no histórico."
             };
         }
         
@@ -50,29 +74,37 @@ function findLastReport(history: any[]): { role: string, content: string } | nul
     for (let i = history.length - 1; i >= 0; i--) {
         const msg = history[i];
         
+        // Pular mensagens do usuário
         if (msg.role === "user") continue;
         
+        // Pular mensagens muito curtas
         if (msg.content.length < 300) continue;
         
         let score = 0;
         
+        // Pontuação por tamanho
         if (msg.content.length > 500) score += 2;
         if (msg.content.length > 1000) score += 2;
         if (msg.content.length > 2000) score += 3;
         
+        // Pontuação por headers
         const headerCount = (msg.content.match(/^#{1,3}\s/gm) || []).length;
         score += Math.min(headerCount * 2, 10);
         
+        // Pontuação por tabelas
         const tableRows = (msg.content.match(/\|.*\|/g) || []).length;
         if (tableRows > 3) score += 5;
         if (tableRows > 10) score += 5;
         
+        // Pontuação por valores monetários
         const monetaryCount = (msg.content.match(/R\$\s*[\d.,]+/g) || []).length;
         score += Math.min(monetaryCount, 10);
         
+        // Pontuação por percentuais
         const percentageCount = (msg.content.match(/\d+[.,]\d+\s*%/g) || []).length;
         score += Math.min(percentageCount, 5);
         
+        // Pontuação por palavras-chave
         const keywords = [
             'relatório', 'análise', 'resumo', 'total', 'receita', 'custo',
             'lucro', 'desempenho', 'resultado', 'métrica', 'indicador',
@@ -85,16 +117,17 @@ function findLastReport(history: any[]): { role: string, content: string } | nul
             }
         }
         
+        // Pontuação por listas
         const listItems = (msg.content.match(/^[-*]\s/gm) || []).length;
         if (listItems > 3) score += 3;
         
-      
+        // Bônus por posição (mensagens mais recentes têm mais peso)
         const positionFromEnd = history.length - 1 - i;
         
-        if (positionFromEnd === 0) score += 100;      
-        else if (positionFromEnd === 1) score += 50;  
-        else if (positionFromEnd === 2) score += 25;  
-        else if (positionFromEnd <= 5) score += 10;   
+        if (positionFromEnd === 0) score += 100;      // Última mensagem
+        else if (positionFromEnd === 1) score += 50;  // Penúltima
+        else if (positionFromEnd === 2) score += 25;  // Antepenúltima
+        else if (positionFromEnd <= 5) score += 10;   // Últimas 5
         
         console.log(`[PDF Agent] Mensagem ${i} (pos ${positionFromEnd}): ${score} pontos (${msg.content.length} chars)`);
         

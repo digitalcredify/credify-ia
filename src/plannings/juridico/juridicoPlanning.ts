@@ -173,7 +173,7 @@ const selectAndExecuteTools = traceable(
 )
 
 async function generateResponseOpenAI(
-    messages: BaseMessage[],  // ← MODIFICADO: de 'any' para 'BaseMessage[]'
+    messages: BaseMessage[],  
     modelType: "advanced" | "balanced" | "fast" = "advanced",
     onChunk?: (chunk: string) => void
 ): Promise<string> {
@@ -225,9 +225,9 @@ export const generateJuridicoResponse = traceable(
         pergunta: string,
         document: string,
         name: string,
-        userId: string,  // ← NOVO
-        sessionId: string,  // ← NOVO
-        historyManager: ConversationHistoryManager,  // ← NOVO
+        userId: string,  
+        sessionId: string,  
+        historyManager: ConversationHistoryManager,  
         onChunk?: (chunk: string) => void
     ): Promise<string> {
         try {
@@ -281,7 +281,6 @@ export const generateJuridicoResponse = traceable(
                     context += "=== ANÁLISE DE RISCO ===\n";
                     context += "Métricas de risco e exposição:\n";
 
-                    // Extrai métricas de risco se disponível
                     if (result.data && result.data.length > 0 && result.data[0].riskMetrics) {
                         context += JSON.stringify(result.data[0].riskMetrics, null, 2) + "\n\n";
                     } else {
@@ -544,7 +543,7 @@ Agora responda à pergunta do usuário com base EXCLUSIVAMENTE nos dados forneci
 
              const messages: BaseMessage[] = [
                 new SystemMessage(systemPrompt),
-                ...conversationHistory,  // ← Adicione histórico
+                ...conversationHistory,  
                 new HumanMessage(pergunta)
             ]
 
@@ -552,8 +551,13 @@ Agora responda à pergunta do usuário com base EXCLUSIVAMENTE nos dados forneci
 
             console.log("[Juridico Planning] Resposta gerada com sucesso")
 
-            await historyManager.addMessage(userId, sessionId, 'user', pergunta);
-            await historyManager.addMessage(userId, sessionId, 'assistant', response);
+            try {
+                await historyManager.addMessage(userId, sessionId, 'user', pergunta);
+                await historyManager.addMessage(userId, sessionId, 'assistant', response);
+                console.log(`✅ [Juridico Planning] Mensagens armazenadas com sucesso`);
+            } catch (error) {
+                console.warn(`⚠️ [Juridico Planning] Erro ao armazenar mensagens (não crítico):`, error);
+            }
 
             return response
 
