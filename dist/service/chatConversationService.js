@@ -20,29 +20,81 @@ class ChatConversationService {
         this.collection = db.collection(this.COLLECTION_NAME);
     }
     /**
-     * Inicializa os índices da collection
+ * Verifica se uma conversa existe
+ */
+    conversationExists(userId, sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const conversation = yield this.collection.findOne({ userId, sessionId }, { projection: { _id: 1 } });
+                return !!conversation;
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao verificar conversa:', error);
+                return false;
+            }
+        });
+    }
+    /**
+     * Cria uma conversa com sessionId específico (gerado pelo frontend)
      */
+    createOrGetConversation(userId, sessionId, document, name, metadata) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const exists = yield this.conversationExists(userId, sessionId);
+                if (exists) {
+                    console.log(`♻️ [ChatConversationService] Conversa já existe: ${sessionId}`);
+                    return { sessionId, isNew: false };
+                }
+                const now = new Date();
+                const expiresAt = new Date(now.getTime() + this.CONVERSATION_TTL_DAYS * 24 * 60 * 60 * 1000);
+                const conversation = {
+                    userId,
+                    sessionId,
+                    document,
+                    name,
+                    messages: [],
+                    createdAt: now,
+                    updatedAt: now,
+                    expiresAt,
+                    metadata
+                };
+                console.log(`\n[ChatConversationService] Criando nova conversa...`);
+                console.log(`   userId: ${userId}`);
+                console.log(`   sessionId: ${sessionId}`);
+                console.log(`   document: ${document}`);
+                console.log(`   name: ${name}`);
+                const result = yield this.collection.insertOne(conversation);
+                console.log(`✅ [ChatConversationService] Conversa criada com sucesso`);
+                console.log(`   MongoDB _id: ${result.insertedId}`);
+                console.log(`   sessionId: ${sessionId}\n`);
+                return { sessionId, isNew: true };
+            }
+            catch (error) {
+                if (error.code === 11000) {
+                    console.warn(`⚠️ [ChatConversationService] Conversa foi criada por outro processo`);
+                    return { sessionId, isNew: false };
+                }
+                console.error('[ChatConversationService] Erro ao criar/obter conversa:', error);
+                throw error;
+            }
+        });
+    }
     initializeIndexes() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 console.log('[ChatConversationService] Criando índices...');
-                // Índice composto: userId + sessionId (ÚNICO)
                 yield this.collection.createIndex({ userId: 1, sessionId: 1 }, { unique: true });
                 console.log('✅ Índice único criado: { userId, sessionId }');
-                // Índice para buscar conversas de um usuário ordenadas por data
                 yield this.collection.createIndex({ userId: 1, createdAt: -1 });
                 console.log('✅ Índice criado: { userId, createdAt }');
-                // Índice para buscar por sessionId
                 yield this.collection.createIndex({ sessionId: 1 });
                 console.log('✅ Índice criado: { sessionId }');
-                // Índice TTL: Expira conversas após 90 dias
                 yield this.collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
                 console.log('✅ Índice TTL criado: { expiresAt }');
                 console.log('[ChatConversationService] Índices criados com sucesso');
             }
             catch (error) {
                 if (error.code === 85) {
-                    // Índice já existe com diferentes opções
                     console.warn('[ChatConversationService] ⚠️ Índices já existem');
                 }
                 else {
@@ -57,7 +109,6 @@ class ChatConversationService {
             let exists = true;
             let attempts = 0;
             const MAX_ATTEMPTS = 5;
-            // Tenta gerar um UUID que não exista
             while (exists && attempts < MAX_ATTEMPTS) {
                 sessionId = (0, uuid_1.v4)();
                 const found = yield this.collection.findOne({ sessionId });
@@ -70,9 +121,6 @@ class ChatConversationService {
             return sessionId;
         });
     }
-    /**
-     * Cria uma nova conversa
-     */
     createConversation(userId, document, name, metadata) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -90,16 +138,19 @@ class ChatConversationService {
                     expiresAt,
                     metadata
                 };
+                console.log(`\n[ChatConversationService] Criando nova conversa...`);
+                console.log(`   userId: ${userId}`);
+                console.log(`   sessionId: ${sessionId}`);
+                console.log(`   document: ${document}`);
+                console.log(`   name: ${name}`);
                 const result = yield this.collection.insertOne(conversation);
-                console.log(`✅ [ChatConversationService] Conversa criada: ${sessionId}`);
-                console.log(`   Usuário: ${userId}`);
-                console.log(`   Documento: ${document}`);
-                console.log(`   Nome: ${name}`);
+                console.log(`✅ [ChatConversationService] Conversa criada com sucesso`);
+                console.log(`   MongoDB _id: ${result.insertedId}`);
+                console.log(`   sessionId: ${sessionId}\n`);
                 return sessionId;
             }
             catch (error) {
                 if (error.code === 11000) {
-                    // Duplicata de índice único, tenta novamente
                     console.warn(`⚠️ [ChatConversationService] Duplicata detectada, tentando novamente...`);
                     return this.createConversation(userId, document, name, metadata);
                 }
@@ -108,9 +159,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Adiciona uma mensagem à conversa
-     */
     addMessage(userId, sessionId, role, content, tokens) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -135,19 +183,23 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Recupera o histórico de uma conversa
-     */
     getConversationHistory(userId, sessionId) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
-                const conversation = yield this.collection.findOne({ userId, sessionId }, { projection: { messages: 1 } });
+                console.log(`\n[ChatConversationService] Buscando histórico...`);
+                console.log(`   userId: ${userId}`);
+                console.log(`   sessionId: ${sessionId}`);
+                const conversation = yield this.collection.findOne({ userId, sessionId }, { projection: { messages: 1, _id: 1, createdAt: 1 } });
                 if (!conversation) {
-                    console.warn(`⚠️ [ChatConversationService] Conversa não encontrada: ${sessionId}`);
+                    console.warn(`⚠️ [ChatConversationService] Conversa NÃO encontrada no MongoDB`);
+                    console.warn(`   Filtro usado: { userId: "${userId}", sessionId: "${sessionId}" }`);
                     return [];
                 }
-                console.log(`✅ [ChatConversationService] Histórico recuperado: ${((_a = conversation.messages) === null || _a === void 0 ? void 0 : _a.length) || 0} mensagens`);
+                const messageCount = ((_a = conversation.messages) === null || _a === void 0 ? void 0 : _a.length) || 0;
+                console.log(`✅ [ChatConversationService] Conversa encontrada`);
+                console.log(`   Criada em: ${conversation.createdAt}`);
+                console.log(`   Mensagens: ${messageCount}`);
                 return conversation.messages || [];
             }
             catch (error) {
@@ -156,9 +208,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Recupera todas as conversas de um usuário
-     */
     getUserConversations(userId_1) {
         return __awaiter(this, arguments, void 0, function* (userId, limit = 50) {
             try {
@@ -184,9 +233,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Recupera uma conversa completa
-     */
     getConversation(userId, sessionId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -207,9 +253,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Deleta uma conversa
-     */
     deleteConversation(userId, sessionId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -228,9 +271,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Atualiza metadados de uma conversa
-     */
     updateConversationMetadata(userId, sessionId, metadata) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -251,9 +291,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Limpa conversas expiradas (pode ser rodado via cron)
-     */
     cleanupExpiredConversations() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -269,9 +306,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Recupera estatísticas de conversas
-     */
     getStatistics() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -312,9 +346,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Recupera conversas de um usuário por período
-     */
     getConversationsByDateRange(userId, startDate, endDate) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -337,9 +368,6 @@ class ChatConversationService {
             }
         });
     }
-    /**
-     * Exporta conversa em formato JSON
-     */
     exportConversation(userId, sessionId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {

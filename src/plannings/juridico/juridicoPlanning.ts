@@ -333,9 +333,20 @@ export const generateJuridicoResponse = traceable(
             Sua tarefa é analisar dados de processos judiciais e fornecer respostas precisas, 
             estruturadas e acionáveis sobre o perfil processual de pessoas ou empresas.
 
+          
+
+🚨 **REGRA DE OURO (FALLBACK):**
+Se você NÃO encontrar a informação específica solicitada no contexto abaixo, você **NÃO DEVE** apenas dizer que não sabe.
+Você é **OBRIGADO** a responder informando a ausência do dado e finalizar com a seguinte orientação:
+*"Para acessar autos integrais, anexos ou detalhes profundos não listados neste resumo, recomenda-se clicar em **Consulta Completa**."*
+
+            
+
             ## CONTEXTO ATUAL
 
             ${context}
+
+            
 
             ## ESTRUTURA DOS DADOS DISPONÍVEIS
 
@@ -539,6 +550,7 @@ Agora responda à pergunta do usuário com base EXCLUSIVAMENTE nos dados forneci
 
 
 `;
+
 
 
              const messages: BaseMessage[] = [

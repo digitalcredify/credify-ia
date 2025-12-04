@@ -142,8 +142,7 @@ const selectAndExecuteTools = (0, traceable_1.traceable)(function selectAndExecu
     });
 });
 function generateResponseOpenAI(messages_2) {
-    return __awaiter(this, arguments, void 0, function* (messages, // ← MODIFICADO: de 'any' para 'BaseMessage[]'
-    modelType = "advanced", onChunk) {
+    return __awaiter(this, arguments, void 0, function* (messages, modelType = "advanced", onChunk) {
         var _a, e_1, _b, _c;
         try {
             const langchainMessages = messages.map((msg) => {
@@ -200,10 +199,7 @@ function generateResponseOpenAI(messages_2) {
         }
     });
 }
-exports.generateJuridicoResponse = (0, traceable_1.traceable)(function generateJuridicoResponse(pergunta, document, name, userId, // ← NOVO
-sessionId, // ← NOVO
-historyManager, // ← NOVO
-onChunk) {
+exports.generateJuridicoResponse = (0, traceable_1.traceable)(function generateJuridicoResponse(pergunta, document, name, userId, sessionId, historyManager, onChunk) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             console.log("[Juridico Planning] Gerando resposta para pergunta jurídica...");
@@ -242,7 +238,6 @@ onChunk) {
                 if (result.tool === 'riskAnalysis') {
                     context += "=== ANÁLISE DE RISCO ===\n";
                     context += "Métricas de risco e exposição:\n";
-                    // Extrai métricas de risco se disponível
                     if (result.data && result.data.length > 0 && result.data[0].riskMetrics) {
                         context += JSON.stringify(result.data[0].riskMetrics, null, 2) + "\n\n";
                     }
@@ -291,9 +286,20 @@ onChunk) {
             Sua tarefa é analisar dados de processos judiciais e fornecer respostas precisas, 
             estruturadas e acionáveis sobre o perfil processual de pessoas ou empresas.
 
+          
+
+🚨 **REGRA DE OURO (FALLBACK):**
+Se você NÃO encontrar a informação específica solicitada no contexto abaixo, você **NÃO DEVE** apenas dizer que não sabe.
+Você é **OBRIGADO** a responder informando a ausência do dado e finalizar com a seguinte orientação:
+*"Para acessar autos integrais, anexos ou detalhes profundos não listados neste resumo, recomenda-se clicar em **Consulta Completa**."*
+
+            
+
             ## CONTEXTO ATUAL
 
             ${context}
+
+            
 
             ## ESTRUTURA DOS DADOS DISPONÍVEIS
 
@@ -499,13 +505,19 @@ Agora responda à pergunta do usuário com base EXCLUSIVAMENTE nos dados forneci
 `;
             const messages = [
                 new messages_1.SystemMessage(systemPrompt),
-                ...conversationHistory, // ← Adicione histórico
+                ...conversationHistory,
                 new messages_1.HumanMessage(pergunta)
             ];
             const response = yield generateResponseOpenAI(messages, "fast", onChunk);
             console.log("[Juridico Planning] Resposta gerada com sucesso");
-            yield historyManager.addMessage(userId, sessionId, 'user', pergunta);
-            yield historyManager.addMessage(userId, sessionId, 'assistant', response);
+            try {
+                yield historyManager.addMessage(userId, sessionId, 'user', pergunta);
+                yield historyManager.addMessage(userId, sessionId, 'assistant', response);
+                console.log(`✅ [Juridico Planning] Mensagens armazenadas com sucesso`);
+            }
+            catch (error) {
+                console.warn(`⚠️ [Juridico Planning] Erro ao armazenar mensagens (não crítico):`, error);
+            }
             return response;
         }
         catch (error) {

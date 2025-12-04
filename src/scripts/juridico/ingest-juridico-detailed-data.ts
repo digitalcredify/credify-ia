@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Document } from "@langchain/core/documents";
 import { QdrantVectorStore } from "@langchain/qdrant";
-import { qdrantClient, openAiEmbbeding } from "../../config";
+import { qdrantClient, openAiEmbbeding, collectionExists } from "../../config";
 import { traceable } from "langsmith/traceable";
 
 const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection'
@@ -107,6 +107,53 @@ export const ingestJuridicoDetailedData = traceable(
         console.log("⚖️ [Juridico Detailed Ingest] Iniciando ingestão de dados detalhados...");
         console.log(`📌 [Juridico Detailed Ingest] SessionID: ${existingSessionId} (reutilizado)`);
         console.log(`🔖 [Juridico Detailed Ingest] ProcessID: ${processId}`);
+
+            try {
+            const exists = await collectionExists(QDRANT_JURIDICO_COLLECTION_NAME);
+
+            if (exists) {
+                const searchResult = await qdrantClient.count(QDRANT_JURIDICO_COLLECTION_NAME, {
+                    filter: {
+                        must: [
+                            {
+                                key: "metadata.processId",
+                                match: {
+                                    value: processId
+                                }
+                            },
+                            {
+                                key: "metadata.isDetailed", // Garante que estamos limpando apenas registros detalhados, se necessário diferenciar
+                                match: {
+                                    value: true
+                                }
+                            }
+                        ]
+                    }
+                });
+
+                if (searchResult.count > 0) {
+                    console.log(`[Juridico Detailed Ingest] 🧹 Deletando ${searchResult.count} registros detalhados antigos para o processo ${processId}...`);
+
+                    await qdrantClient.delete(QDRANT_JURIDICO_COLLECTION_NAME, {
+                        filter: {
+                            must: [
+                                {
+                                    key: "metadata.processId",
+                                    match: {
+                                        value: processId
+                                    }
+                                }
+                            ]
+                        },
+                        wait: true
+                    });
+
+                    console.log(`[Juridico Detailed Ingest] ✅ Limpeza concluída com sucesso.`);
+                }
+            }
+        } catch (error: any) {
+            console.warn(`[Juridico Detailed Ingest] ⚠️ Erro não fatal ao tentar limpar dados antigos:`, error.message);
+        }
 
         const processData = fullJson?.RESPOSTA?.DATA;
 

@@ -99,6 +99,49 @@ exports.ingestJuridicoDetailedData = (0, traceable_1.traceable)(function ingestJ
         console.log("⚖️ [Juridico Detailed Ingest] Iniciando ingestão de dados detalhados...");
         console.log(`📌 [Juridico Detailed Ingest] SessionID: ${existingSessionId} (reutilizado)`);
         console.log(`🔖 [Juridico Detailed Ingest] ProcessID: ${processId}`);
+        try {
+            const exists = yield (0, config_1.collectionExists)(QDRANT_JURIDICO_COLLECTION_NAME);
+            if (exists) {
+                const searchResult = yield config_1.qdrantClient.count(QDRANT_JURIDICO_COLLECTION_NAME, {
+                    filter: {
+                        must: [
+                            {
+                                key: "metadata.processId",
+                                match: {
+                                    value: processId
+                                }
+                            },
+                            {
+                                key: "metadata.isDetailed", // Garante que estamos limpando apenas registros detalhados, se necessário diferenciar
+                                match: {
+                                    value: true
+                                }
+                            }
+                        ]
+                    }
+                });
+                if (searchResult.count > 0) {
+                    console.log(`[Juridico Detailed Ingest] 🧹 Deletando ${searchResult.count} registros detalhados antigos para o processo ${processId}...`);
+                    yield config_1.qdrantClient.delete(QDRANT_JURIDICO_COLLECTION_NAME, {
+                        filter: {
+                            must: [
+                                {
+                                    key: "metadata.processId",
+                                    match: {
+                                        value: processId
+                                    }
+                                }
+                            ]
+                        },
+                        wait: true
+                    });
+                    console.log(`[Juridico Detailed Ingest] ✅ Limpeza concluída com sucesso.`);
+                }
+            }
+        }
+        catch (error) {
+            console.warn(`[Juridico Detailed Ingest] ⚠️ Erro não fatal ao tentar limpar dados antigos:`, error.message);
+        }
         const processData = (_a = fullJson === null || fullJson === void 0 ? void 0 : fullJson.RESPOSTA) === null || _a === void 0 ? void 0 : _a.DATA;
         if (!processData) {
             console.warn("⚠️ [Juridico Detailed Ingest] Nenhum dado de processo encontrado.");

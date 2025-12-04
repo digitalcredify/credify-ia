@@ -32,7 +32,6 @@ export async function runPdfAgent(
         
         console.log(`[PDF Agent] Histórico recuperado: ${sessionHistory.length} mensagens`);
         
-        // Encontrar o melhor relatório
         const lastReport = findLastReport(sessionHistory);
         
         if (!lastReport) {

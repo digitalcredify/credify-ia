@@ -6,9 +6,9 @@ export const runJuridicoWebAgent = async(
     pergunta:string,
     document:string,
     name:string,
-    userId: string,  // ← NOVO
-    sessionId: string,  // ← NOVO
-    historyManager: ConversationHistoryManager,  // ← NOVO
+    userId: string,  
+    sessionId: string,  
+    historyManager: ConversationHistoryManager,  
     onChunk?: (chunk: string) => void    
 ) => {
 
@@ -20,9 +20,9 @@ export const runJuridicoWebAgent = async(
             pergunta,
             document,
             name,
-            userId,  // ← NOVO
-            sessionId,  // ← NOVO
-            historyManager,  // ← NOVO
+            userId,  
+            sessionId,  
+            historyManager,  
             onChunk
         );
         return response;

@@ -20,29 +20,33 @@ const ingest_juridico_data_1 = require("../scripts/juridico/ingest-juridico-data
 const juridicoAgentService_1 = require("../service/juridicoAgentService");
 const ingest_juridico_detailed_data_1 = require("../scripts/juridico/ingest-juridico-detailed-data");
 const chatConversationService_1 = require("../service/chatConversationService");
-const cacheManager_1 = require("../service/cacheManager");
 const conversationHistoryManager_1 = require("../service/conversationHistoryManager");
-const mongoDb = (0, config_1.getDatabase)();
-const mongoService = new chatConversationService_1.ChatConversationService(mongoDb);
-const cacheManager = new cacheManager_1.ConversationCacheManager();
-const historyManager = new conversationHistoryManager_1.ConversationHistoryManager(mongoService, cacheManager);
 const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { pergunta, document, name, sessionId, userId } = req.body;
-        if (!pergunta || !document || !name || !userId) {
+        const { pergunta, document, name, userId, sessionId } = req.body;
+        if (!pergunta || !document || !name || !sessionId) {
             return res.status(400).json({
-                error: "Campos obrigatórios: pergunta, documento, nome e usuário autenticado"
+                error: "Campos obrigatórios: pergunta, documento, nome e sessionId"
             });
         }
-        console.log(`📝 [Juridico Controller] Pergunta recebida: "${pergunta}"`);
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`📝 [Juridico Controller] Pergunta: "${pergunta}"`);
+        console.log(`📄 [Juridico Controller] Documento: ${document}`);
+        console.log(`🏷️ [Juridico Controller] Nome: ${name}`);
         console.log(`🔐 [Juridico Controller] Usuário: ${userId}`);
-        // Se não houver sessionId, criar uma nova conversa
-        let finalSessionId = sessionId;
-        if (!finalSessionId) {
-            finalSessionId = yield mongoService.createConversation(userId, document, name);
-            console.log(`✨ [Juridico Controller] Nova conversa criada: ${finalSessionId}`);
+        console.log(`📌 [Juridico Controller] SessionId: ${sessionId}`);
+        console.log(`${'='.repeat(60)}\n`);
+        const mongoDb = (0, config_1.getDatabase)();
+        const mongoService = new chatConversationService_1.ChatConversationService(mongoDb);
+        const historyManager = new conversationHistoryManager_1.ConversationHistoryManager(mongoService);
+        console.log(`🔍 [Juridico Controller] Verificando sessão...`);
+        const { sessionId: finalSessionId, isNew } = yield mongoService.createOrGetConversation(userId, sessionId, document, name);
+        if (isNew) {
+            console.log(`✨ [Juridico Controller] Nova conversa criada\n`);
         }
-        // Fluxo com streaming
+        else {
+            console.log(`♻️ [Juridico Controller] Usando conversa existente\n`);
+        }
         if (config_1.ENABLE_STREAMING) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
@@ -56,15 +60,16 @@ const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, 
                 res.write(sseMessage);
             };
             try {
-                yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name, userId, // ← NOVO
-                finalSessionId, // ← NOVO
-                historyManager, // ← NOVO
-                chunk);
-                res.write(`data: ${JSON.stringify({ done: true, fullResponse, sessionId: finalSessionId })}\n\n`);
+                const response = yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name, userId, finalSessionId, historyManager, chunk);
+                res.write(`data: ${JSON.stringify({
+                    done: true,
+                    fullResponse: response,
+                    sessionId: finalSessionId
+                })}\n\n`);
                 res.end();
             }
             catch (error) {
-                console.error("[Jurídico Controller] Erro ao gerar resposta:", error);
+                console.error("[Juridico Controller] Erro ao gerar resposta:", error);
                 const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
                 res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
                 res.end();
@@ -72,10 +77,7 @@ const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, 
         }
         else {
             try {
-                const response = yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name, userId, // ← NOVO
-                finalSessionId, // ← NOVO
-                historyManager // ← NOVO
-                );
+                const response = yield (0, juridicoAgentService_1.juridicoAgentService)(pergunta, document, name, userId, finalSessionId, historyManager);
                 res.status(200).json({
                     success: true,
                     response: response,
@@ -83,7 +85,7 @@ const juridicoAgentController = (req, res) => __awaiter(void 0, void 0, void 0, 
                 });
             }
             catch (error) {
-                console.error("[Juridico Controller] Erro na variável de streaming:", error);
+                console.error("[Juridico Controller] Erro:", error);
                 if (!res.headersSent) {
                     res.status(500).json({
                         error: error instanceof Error ? error.message : "Erro interno do servidor"
