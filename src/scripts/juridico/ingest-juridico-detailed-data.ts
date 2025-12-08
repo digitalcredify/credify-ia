@@ -6,9 +6,7 @@ import { traceable } from "langsmith/traceable";
 
 const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection'
 
-/**
- * Função auxiliar para converter objetos REGISTRO* em arrays
- */
+
 const registroObjectToArray = (obj: any): any[] => {
     if (!obj || typeof obj !== 'object') return [];
 
@@ -22,9 +20,7 @@ const registroObjectToArray = (obj: any): any[] => {
         .map(key => obj[key]);
 };
 
-/**
- * Formata os assuntos CNJ do processo
- */
+
 const formatAssuntos = (assuntosObj: any): string => {
     const assuntosArray = registroObjectToArray(assuntosObj);
     if (assuntosArray.length === 0) return "Sem assuntos registrados";
@@ -57,8 +53,8 @@ const formatPartes = (partesObj: any): string => {
                 ? advogadosArray
                     .map((adv: any) => {
                         const nomeAdv = adv.NOME || "N/A";
-                        const oab = adv.OAB 
-                            ? `OAB ${adv.OAB.UF}/${adv.OAB.NUMERO}` 
+                        const oab = adv.OAB
+                            ? `OAB ${adv.OAB.UF}/${adv.OAB.NUMERO}`
                             : "OAB não informada";
                         return `${nomeAdv} (${oab})`;
                     })
@@ -85,11 +81,11 @@ const formatMovimentos = (movimentosObj: any): string => {
     return ultimosMovimentos
         .map((mov: any, index: number) => {
             const nomeOriginalArray = registroObjectToArray(mov.NOMEORIGINAL);
-            const descricao = nomeOriginalArray.length > 0 
-                ? nomeOriginalArray[0] 
+            const descricao = nomeOriginalArray.length > 0
+                ? nomeOriginalArray[0]
                 : mov.DESCRICAO || "N/A";
             const data = mov.DATA || "N/A";
-            
+
             return `${index + 1}. [${data}] ${descricao}`;
         })
         .join("\n");
@@ -101,17 +97,19 @@ export const ingestJuridicoDetailedData = traceable(
         fullJson: any,
         document: string,
         name: string,
-        existingSessionId: string, 
-        processId: string          
+        existingSessionId: string,
+        processId: string
     ) {
         console.log("⚖️ [Juridico Detailed Ingest] Iniciando ingestão de dados detalhados...");
         console.log(`📌 [Juridico Detailed Ingest] SessionID: ${existingSessionId} (reutilizado)`);
         console.log(`🔖 [Juridico Detailed Ingest] ProcessID: ${processId}`);
 
-            try {
+        try {
             const exists = await collectionExists(QDRANT_JURIDICO_COLLECTION_NAME);
 
             if (exists) {
+                console.log(`[Juridico Detailed Ingest] 🔍 Buscando e deletando registros antigos para o processo ${processId}...`);
+
                 const searchResult = await qdrantClient.count(QDRANT_JURIDICO_COLLECTION_NAME, {
                     filter: {
                         must: [
@@ -120,22 +118,18 @@ export const ingestJuridicoDetailedData = traceable(
                                 match: {
                                     value: processId
                                 }
-                            },
-                            {
-                                key: "metadata.isDetailed", // Garante que estamos limpando apenas registros detalhados, se necessário diferenciar
-                                match: {
-                                    value: true
-                                }
                             }
                         ]
                     }
                 });
 
-                if (searchResult.count > 0) {
-                    console.log(`[Juridico Detailed Ingest] 🧹 Deletando ${searchResult.count} registros detalhados antigos para o processo ${processId}...`);
+                const count = searchResult.count;
+
+                if (count > 0) {
+                    console.log(`[Juridico Detailed Ingest] 🧹 Deletando ${count} registro(s) antigo(s)...`);
 
                     await qdrantClient.delete(QDRANT_JURIDICO_COLLECTION_NAME, {
-                        filter: {
+                        filter: { 
                             must: [
                                 {
                                     key: "metadata.processId",
@@ -149,6 +143,8 @@ export const ingestJuridicoDetailedData = traceable(
                     });
 
                     console.log(`[Juridico Detailed Ingest] ✅ Limpeza concluída com sucesso.`);
+                } else {
+                    console.log(`[Juridico Detailed Ingest] ℹ️ Nenhum registro antigo encontrado.`);
                 }
             }
         } catch (error: any) {

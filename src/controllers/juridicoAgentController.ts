@@ -17,7 +17,7 @@ import { ConversationHistoryManager } from '../service/conversationHistoryManage
 
 export const juridicoAgentController = async (req: Request, res: Response) => {
     try {
-        const { pergunta, document, name, userId, sessionId } = req.body;
+        const { pergunta, document, name, userId, sessionId,activeCnj } = req.body;
 
 
         if (!pergunta || !document || !name || !sessionId) {
@@ -75,7 +75,8 @@ export const juridicoAgentController = async (req: Request, res: Response) => {
                     userId,
                     finalSessionId,
                     historyManager,
-                    chunk
+                    chunk,
+                    activeCnj
                 );
 
                 res.write(`data: ${JSON.stringify({

@@ -10,7 +10,8 @@ export const juridicoAgentService = async (
     userId: string,
     sessionId: string,
     historyManager: ConversationHistoryManager,
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    activeCnj?:string | null
 ) => {
     try {
         console.log("[Juridico Service] Iniciando processamento...")
@@ -26,7 +27,8 @@ export const juridicoAgentService = async (
                     userId,
                     sessionId,
                     historyManager,
-                    onChunk
+                    onChunk,
+                    activeCnj
                 )
 
             case 'pdf_agent':
