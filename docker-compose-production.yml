@@ -1,0 +1,18 @@
+version: "3.1"
+services:
+  app:
+    image: digitalcredify/prd-credify-ia:latest
+    networks:
+      - cred-production
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    ports:
+      - 3080:3080
+networks:
+  cred-production:
+    external: true
