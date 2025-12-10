@@ -1,99 +1,104 @@
-import { v4 as uuidv4 } from 'uuid';
-import { Document } from "@langchain/core/documents";
-import { QdrantVectorStore } from "@langchain/qdrant";
-import { qdrantClient, openAiEmbbeding, collectionExists, balancedModel } from "../../config";
-import { traceable } from "langsmith/traceable";
-import { HumanMessage, SystemMessage } from 'langchain';
-
-const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection'
-
-
-const registroObjectToArray = (obj: any): any[] => {
-    if (!obj || typeof obj !== 'object') return [];
-
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __asyncValues = (this && this.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ingestJuridicoDetailedData = void 0;
+const documents_1 = require("@langchain/core/documents");
+const qdrant_1 = require("@langchain/qdrant");
+const config_1 = require("../../config");
+const traceable_1 = require("langsmith/traceable");
+const langchain_1 = require("langchain");
+const QDRANT_JURIDICO_COLLECTION_NAME = 'credify_juridico_collection';
+const registroObjectToArray = (obj) => {
+    if (!obj || typeof obj !== 'object')
+        return [];
     return Object.keys(obj)
         .filter(key => key.startsWith('REGISTRO'))
         .sort((a, b) => {
-            const numA = parseInt(a.replace('REGISTRO', ''));
-            const numB = parseInt(b.replace('REGISTRO', ''));
-            return numA - numB;
-        })
+        const numA = parseInt(a.replace('REGISTRO', ''));
+        const numB = parseInt(b.replace('REGISTRO', ''));
+        return numA - numB;
+    })
         .map(key => obj[key]);
 };
-
-
-const formatAssuntos = (assuntosObj: any): string => {
+const formatAssuntos = (assuntosObj) => {
     const assuntosArray = registroObjectToArray(assuntosObj);
-    if (assuntosArray.length === 0) return "Sem assuntos registrados";
-
+    if (assuntosArray.length === 0)
+        return "Sem assuntos registrados";
     return assuntosArray
-        .map((assunto: any, index: number) => {
-            const titulo = assunto.TITULO || "N/A";
-            const codigoCNJ = assunto.CODIGOCNJ || "N/A";
-            return `${index + 1}. ${titulo} (CNJ: ${codigoCNJ})`;
-        })
+        .map((assunto, index) => {
+        const titulo = assunto.TITULO || "N/A";
+        const codigoCNJ = assunto.CODIGOCNJ || "N/A";
+        return `${index + 1}. ${titulo} (CNJ: ${codigoCNJ})`;
+    })
         .join("\n");
 };
-
 /**
  * Formata as partes do processo com advogados
  */
-const formatPartes = (partesObj: any): string => {
+const formatPartes = (partesObj) => {
     const partesArray = registroObjectToArray(partesObj);
-    if (partesArray.length === 0) return "Sem partes registradas";
-
+    if (partesArray.length === 0)
+        return "Sem partes registradas";
     return partesArray
-        .map((parte: any, index: number) => {
-            const tipo = parte.TIPO || "N/A";
-            const nome = parte.NOME || "N/A";
-            const polo = parte.POLO || "N/A";
-            const documento = parte.CPF || parte.CNPJ || "N/A";
-
-            const advogadosArray = registroObjectToArray(parte.ADVOGADOS);
-            const advogados = advogadosArray.length > 0
-                ? advogadosArray
-                    .map((adv: any) => {
-                        const nomeAdv = adv.NOME || "N/A";
-                        const oab = adv.OAB
-                            ? `OAB ${adv.OAB.UF}/${adv.OAB.NUMERO}`
-                            : "OAB não informada";
-                        return `${nomeAdv} (${oab})`;
-                    })
-                    .join(", ")
-                : "Sem advogados registrados";
-
-            return (
-                `${index + 1}. ${tipo} - ${nome}\n` +
-                `   - Polo: ${polo}\n` +
-                `   - Documento: ${documento}\n` +
-                `   - Advogados: ${advogados}`
-            );
-        })
+        .map((parte, index) => {
+        const tipo = parte.TIPO || "N/A";
+        const nome = parte.NOME || "N/A";
+        const polo = parte.POLO || "N/A";
+        const documento = parte.CPF || parte.CNPJ || "N/A";
+        const advogadosArray = registroObjectToArray(parte.ADVOGADOS);
+        const advogados = advogadosArray.length > 0
+            ? advogadosArray
+                .map((adv) => {
+                const nomeAdv = adv.NOME || "N/A";
+                const oab = adv.OAB
+                    ? `OAB ${adv.OAB.UF}/${adv.OAB.NUMERO}`
+                    : "OAB não informada";
+                return `${nomeAdv} (${oab})`;
+            })
+                .join(", ")
+            : "Sem advogados registrados";
+        return (`${index + 1}. ${tipo} - ${nome}\n` +
+            `   - Polo: ${polo}\n` +
+            `   - Documento: ${documento}\n` +
+            `   - Advogados: ${advogados}`);
+    })
         .join("\n\n");
 };
-
-
-const formatMovimentos = (movimentosObj: any): string => {
+const formatMovimentos = (movimentosObj) => {
     const movimentosArray = registroObjectToArray(movimentosObj);
-    if (movimentosArray.length === 0) return "Sem movimentos registrados";
-
+    if (movimentosArray.length === 0)
+        return "Sem movimentos registrados";
     const ultimosMovimentos = movimentosArray.slice(0, 10);
-
     return ultimosMovimentos
-        .map((mov: any, index: number) => {
-            const nomeOriginalArray = registroObjectToArray(mov.NOMEORIGINAL);
-            const descricao = nomeOriginalArray.length > 0
-                ? nomeOriginalArray[0]
-                : mov.DESCRICAO || "N/A";
-            const data = mov.DATA || "N/A";
-
-            return `${index + 1}. [${data}] ${descricao}`;
-        })
+        .map((mov, index) => {
+        const nomeOriginalArray = registroObjectToArray(mov.NOMEORIGINAL);
+        const descricao = nomeOriginalArray.length > 0
+            ? nomeOriginalArray[0]
+            : mov.DESCRICAO || "N/A";
+        const data = mov.DATA || "N/A";
+        return `${index + 1}. [${data}] ${descricao}`;
+    })
         .join("\n");
 };
-
-async function generateSummary(context: string, onChunk?: (chunk: string) => void): Promise<string> {
-    const systemPrompt = `
+function generateSummary(context, onChunk) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, e_1, _b, _c;
+        const systemPrompt = `
 Você é um **Consultor Jurídico Estratégico Sênior** da Credify.
 Seu público-alvo são analistas de risco e advogados que precisam tomar decisões rápidas e seguras.
 
@@ -130,55 +135,57 @@ Utilize estritamente esta estrutura visual para facilitar o "escaneamento" rápi
 
 🚨 **Ponto de Atenção:** Há risco iminente de expropriação de bens. Monitorar diariamente novos pedidos de Bacenjud.
 `;
-
-    const messages = [
-        new SystemMessage(systemPrompt),
-        new HumanMessage(`Analise os dados brutos deste processo:\n\n${context}`)
-    ];
-
-    try {
-        if (onChunk) {
-            const stream = await balancedModel.stream(messages);
-            let fullText = "";
-            for await (const chunk of stream) {
-                const content = String(chunk.content || "");
-                if (content) {
-                    onChunk(content);
-                    fullText += content;
+        const messages = [
+            new langchain_1.SystemMessage(systemPrompt),
+            new langchain_1.HumanMessage(`Analise os dados brutos deste processo:\n\n${context}`)
+        ];
+        try {
+            if (onChunk) {
+                const stream = yield config_1.balancedModel.stream(messages);
+                let fullText = "";
+                try {
+                    for (var _d = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = yield stream_1.next(), _a = stream_1_1.done, !_a; _d = true) {
+                        _c = stream_1_1.value;
+                        _d = false;
+                        const chunk = _c;
+                        const content = String(chunk.content || "");
+                        if (content) {
+                            onChunk(content);
+                            fullText += content;
+                        }
+                    }
                 }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (!_d && !_a && (_b = stream_1.return)) yield _b.call(stream_1);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                return fullText;
             }
-            return fullText;
-        } else {
-            const response = await balancedModel.invoke(messages);
-            return String(response.content);
+            else {
+                const response = yield config_1.balancedModel.invoke(messages);
+                return String(response.content);
+            }
         }
-    } catch (error) {
-        console.error("Erro ao gerar resumo IA:", error);
-        return "Não foi possível gerar a análise inteligente no momento.";
-    }
+        catch (error) {
+            console.error("Erro ao gerar resumo IA:", error);
+            return "Não foi possível gerar a análise inteligente no momento.";
+        }
+    });
 }
-
-
-export const ingestJuridicoDetailedData = traceable(
-    async function ingestJuridicoDetailedData(
-        fullJson: any,
-        document: string,
-        name: string,
-        existingSessionId: string,
-        processId: string,
-        onChunk?: (chunk: string) => void 
-    ) {
+exports.ingestJuridicoDetailedData = (0, traceable_1.traceable)(function ingestJuridicoDetailedData(fullJson, document, name, existingSessionId, processId, onChunk) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         console.log("⚖️ [Juridico Detailed Ingest] Iniciando ingestão de dados detalhados...");
         console.log(`📌 [Juridico Detailed Ingest] SessionID: ${existingSessionId} (reutilizado)`);
         console.log(`🔖 [Juridico Detailed Ingest] ProcessID: ${processId}`);
-
         try {
-            const exists = await collectionExists(QDRANT_JURIDICO_COLLECTION_NAME);
-
+            const exists = yield (0, config_1.collectionExists)(QDRANT_JURIDICO_COLLECTION_NAME);
             if (exists) {
                 console.log(`[Juridico Detailed Ingest] 🔍 Buscando e deletando registros antigos para o processo ${processId}...`);
-
-                const searchResult = await qdrantClient.count(QDRANT_JURIDICO_COLLECTION_NAME, {
+                const searchResult = yield config_1.qdrantClient.count(QDRANT_JURIDICO_COLLECTION_NAME, {
                     filter: {
                         must: [
                             {
@@ -190,14 +197,11 @@ export const ingestJuridicoDetailedData = traceable(
                         ]
                     }
                 });
-
                 const count = searchResult.count;
-
                 if (count > 0) {
                     console.log(`[Juridico Detailed Ingest] 🧹 Deletando ${count} registro(s) antigo(s)...`);
-
-                    await qdrantClient.delete(QDRANT_JURIDICO_COLLECTION_NAME, {
-                        filter: { 
+                    yield config_1.qdrantClient.delete(QDRANT_JURIDICO_COLLECTION_NAME, {
+                        filter: {
                             must: [
                                 {
                                     key: "metadata.processId",
@@ -209,23 +213,21 @@ export const ingestJuridicoDetailedData = traceable(
                         },
                         wait: true
                     });
-
                     console.log(`[Juridico Detailed Ingest] ✅ Limpeza concluída com sucesso.`);
-                } else {
+                }
+                else {
                     console.log(`[Juridico Detailed Ingest] ℹ️ Nenhum registro antigo encontrado.`);
                 }
             }
-        } catch (error: any) {
+        }
+        catch (error) {
             console.warn(`[Juridico Detailed Ingest] ⚠️ Erro não fatal ao tentar limpar dados antigos:`, error.message);
         }
-
-        const processData = fullJson?.RESPOSTA?.DATA;
-
+        const processData = (_a = fullJson === null || fullJson === void 0 ? void 0 : fullJson.RESPOSTA) === null || _a === void 0 ? void 0 : _a.DATA;
         if (!processData) {
             console.warn("⚠️ [Juridico Detailed Ingest] Nenhum dado de processo encontrado.");
             return { sessionId: existingSessionId, count: 0 };
         }
-
         const pageContent = `
 🔖 PROCESSO ID: ${processId}
 📋 TIPO: CONSULTA DETALHADA (JURÍDICO COMPLETO)
@@ -252,7 +254,7 @@ LOCALIZAÇÃO E COMPETÊNCIA
 CLASSIFICAÇÃO
 ═══════════════════════════════════════════════════════════════
 - Área: ${processData.AREA || "N/A"}
-- Classe Processual: ${processData.CLASSEPROCESSUAL?.NOME || "N/A"} (CNJ: ${processData.CLASSEPROCESSUAL?.CODIGOCNJ || "N/A"})
+- Classe Processual: ${((_b = processData.CLASSEPROCESSUAL) === null || _b === void 0 ? void 0 : _b.NOME) || "N/A"} (CNJ: ${((_c = processData.CLASSEPROCESSUAL) === null || _c === void 0 ? void 0 : _c.CODIGOCNJ) || "N/A"})
 
 ASSUNTOS:
 ${formatAssuntos(processData.ASSUNTOSCNJ)}
@@ -267,10 +269,10 @@ DATAS IMPORTANTES
 ═══════════════════════════════════════════════════════════════
 VALOR E CARACTERÍSTICAS
 ═══════════════════════════════════════════════════════════════
-- Valor da Causa: ${processData.VALORCAUSA?.MOEDA || "R$"} ${processData.VALORCAUSA?.VALOR || "0"}
+- Valor da Causa: ${((_d = processData.VALORCAUSA) === null || _d === void 0 ? void 0 : _d.MOEDA) || "R$"} ${((_e = processData.VALORCAUSA) === null || _e === void 0 ? void 0 : _e.VALOR) || "0"}
 - Justiça Gratuita: ${processData.EJUSTICAGRATUITA === "1" ? "Sim" : "Não"}
 - Processo Digital: ${processData.EPROCESSODIGITAL === "1" ? "Sim" : "Não"}
-- Status: ${processData.STATUSPREDICTUS?.STATUSPROCESSO || "N/A"}
+- Status: ${((_f = processData.STATUSPREDICTUS) === null || _f === void 0 ? void 0 : _f.STATUSPROCESSO) || "N/A"}
 
 ═══════════════════════════════════════════════════════════════
 PARTES ENVOLVIDAS
@@ -288,16 +290,11 @@ DADOS DO ALVO DA CONSULTA
 - Nome: ${name}
 - Documento: ${document}
         `.trim();
-
-        const aiSummary = await generateSummary(pageContent,onChunk);
-
-
+        const aiSummary = yield generateSummary(pageContent, onChunk);
         const partesArray = registroObjectToArray(processData.PARTES);
-        const autores = partesArray.filter((p: any) => p.POLO === "ATIVO").map((p: any) => p.NOME).join(", ");
-        const reus = partesArray.filter((p: any) => p.POLO === "PASSIVO").map((p: any) => p.NOME).join(", ");
-
-
-        const detailedDocument = new Document({
+        const autores = partesArray.filter((p) => p.POLO === "ATIVO").map((p) => p.NOME).join(", ");
+        const reus = partesArray.filter((p) => p.POLO === "PASSIVO").map((p) => p.NOME).join(", ");
+        const detailedDocument = new documents_1.Document({
             pageContent: pageContent,
             metadata: {
                 sessionId: existingSessionId,
@@ -308,10 +305,10 @@ DADOS DO ALVO DA CONSULTA
                 area: processData.AREA,
                 tribunal: processData.TRIBUNAL,
                 uf: processData.UF,
-                value: parseFloat(processData.VALORCAUSA?.VALOR || "0"),
-                status: processData.STATUSPREDICTUS?.STATUSPROCESSO || "N/A",
+                value: parseFloat(((_g = processData.VALORCAUSA) === null || _g === void 0 ? void 0 : _g.VALOR) || "0"),
+                status: ((_h = processData.STATUSPREDICTUS) === null || _h === void 0 ? void 0 : _h.STATUSPROCESSO) || "N/A",
                 grau: processData.GRAUPROCESSO || "N/A",
-                classe: processData.CLASSEPROCESSUAL?.NOME || "N/A",
+                classe: ((_j = processData.CLASSEPROCESSUAL) === null || _j === void 0 ? void 0 : _j.NOME) || "N/A",
                 dataDistribuicao: processData.DATADISTRIBUICAO || "N/A",
                 juiz: processData.JUIZ || "N/A",
                 orgaoJulgador: processData.ORGAOJULGADOR || "N/A",
@@ -324,24 +321,18 @@ DADOS DO ALVO DA CONSULTA
                 assuntosCount: registroObjectToArray(processData.ASSUNTOSCNJ).length
             }
         });
-
         console.log(`[Juridico Detailed Ingest] Inserindo 1 documento detalhado para o processo ${processId}...`);
-
-        const vectorStore = new QdrantVectorStore(openAiEmbbeding, {
-            client: qdrantClient,
+        const vectorStore = new qdrant_1.QdrantVectorStore(config_1.openAiEmbbeding, {
+            client: config_1.qdrantClient,
             collectionName: QDRANT_JURIDICO_COLLECTION_NAME,
         });
-
-        await vectorStore.addDocuments([detailedDocument]);
-
+        yield vectorStore.addDocuments([detailedDocument]);
         console.log(`[Juridico Detailed Ingest] ✅ Sucesso! Dados detalhados adicionados ao SessionID: ${existingSessionId}`);
-
         return {
             sessionId: existingSessionId,
             count: 1,
             processId: processId,
             summary: aiSummary
         };
-    },
-    { name: "Ingestão de dados DETALHADOS - JURIDICO", run_type: "tool" }
-);
+    });
+}, { name: "Ingestão de dados DETALHADOS - JURIDICO", run_type: "tool" });

@@ -1,0 +1,387 @@
+"use strict";
+// src/service/chatConversationService.ts
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ChatConversationService = void 0;
+const uuid_1 = require("uuid");
+class ChatConversationService {
+    constructor(db) {
+        this.COLLECTION_NAME = 'chat_conversations';
+        this.CONVERSATION_TTL_DAYS = 90;
+        this.db = db;
+        this.collection = db.collection(this.COLLECTION_NAME);
+    }
+    /**
+ * Verifica se uma conversa existe
+ */
+    conversationExists(userId, sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const conversation = yield this.collection.findOne({ userId, sessionId }, { projection: { _id: 1 } });
+                return !!conversation;
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao verificar conversa:', error);
+                return false;
+            }
+        });
+    }
+    /**
+     * Cria uma conversa com sessionId específico (gerado pelo frontend)
+     */
+    createOrGetConversation(userId, sessionId, document, name, metadata) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const exists = yield this.conversationExists(userId, sessionId);
+                if (exists) {
+                    console.log(`♻️ [ChatConversationService] Conversa já existe: ${sessionId}`);
+                    return { sessionId, isNew: false };
+                }
+                const now = new Date();
+                const expiresAt = new Date(now.getTime() + this.CONVERSATION_TTL_DAYS * 24 * 60 * 60 * 1000);
+                const conversation = {
+                    userId,
+                    sessionId,
+                    document,
+                    name,
+                    messages: [],
+                    createdAt: now,
+                    updatedAt: now,
+                    expiresAt,
+                    metadata
+                };
+                console.log(`\n[ChatConversationService] Criando nova conversa...`);
+                console.log(`   userId: ${userId}`);
+                console.log(`   sessionId: ${sessionId}`);
+                console.log(`   document: ${document}`);
+                console.log(`   name: ${name}`);
+                const result = yield this.collection.insertOne(conversation);
+                console.log(`✅ [ChatConversationService] Conversa criada com sucesso`);
+                console.log(`   MongoDB _id: ${result.insertedId}`);
+                console.log(`   sessionId: ${sessionId}\n`);
+                return { sessionId, isNew: true };
+            }
+            catch (error) {
+                if (error.code === 11000) {
+                    console.warn(`⚠️ [ChatConversationService] Conversa foi criada por outro processo`);
+                    return { sessionId, isNew: false };
+                }
+                console.error('[ChatConversationService] Erro ao criar/obter conversa:', error);
+                throw error;
+            }
+        });
+    }
+    initializeIndexes() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                console.log('[ChatConversationService] Criando índices...');
+                yield this.collection.createIndex({ userId: 1, sessionId: 1 }, { unique: true });
+                console.log('✅ Índice único criado: { userId, sessionId }');
+                yield this.collection.createIndex({ userId: 1, createdAt: -1 });
+                console.log('✅ Índice criado: { userId, createdAt }');
+                yield this.collection.createIndex({ sessionId: 1 });
+                console.log('✅ Índice criado: { sessionId }');
+                yield this.collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+                console.log('✅ Índice TTL criado: { expiresAt }');
+                console.log('[ChatConversationService] Índices criados com sucesso');
+            }
+            catch (error) {
+                if (error.code === 85) {
+                    console.warn('[ChatConversationService] ⚠️ Índices já existem');
+                }
+                else {
+                    throw error;
+                }
+            }
+        });
+    }
+    generateUniqueSessionId() {
+        return __awaiter(this, void 0, void 0, function* () {
+            let sessionId = (0, uuid_1.v4)();
+            let exists = true;
+            let attempts = 0;
+            const MAX_ATTEMPTS = 5;
+            while (exists && attempts < MAX_ATTEMPTS) {
+                sessionId = (0, uuid_1.v4)();
+                const found = yield this.collection.findOne({ sessionId });
+                exists = !!found;
+                attempts++;
+            }
+            if (exists) {
+                throw new Error('Falha ao gerar sessionId único após múltiplas tentativas');
+            }
+            return sessionId;
+        });
+    }
+    createConversation(userId, document, name, metadata) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const sessionId = yield this.generateUniqueSessionId();
+                const now = new Date();
+                const expiresAt = new Date(now.getTime() + this.CONVERSATION_TTL_DAYS * 24 * 60 * 60 * 1000);
+                const conversation = {
+                    userId,
+                    sessionId,
+                    document,
+                    name,
+                    messages: [],
+                    createdAt: now,
+                    updatedAt: now,
+                    expiresAt,
+                    metadata
+                };
+                console.log(`\n[ChatConversationService] Criando nova conversa...`);
+                console.log(`   userId: ${userId}`);
+                console.log(`   sessionId: ${sessionId}`);
+                console.log(`   document: ${document}`);
+                console.log(`   name: ${name}`);
+                const result = yield this.collection.insertOne(conversation);
+                console.log(`✅ [ChatConversationService] Conversa criada com sucesso`);
+                console.log(`   MongoDB _id: ${result.insertedId}`);
+                console.log(`   sessionId: ${sessionId}\n`);
+                return sessionId;
+            }
+            catch (error) {
+                if (error.code === 11000) {
+                    console.warn(`⚠️ [ChatConversationService] Duplicata detectada, tentando novamente...`);
+                    return this.createConversation(userId, document, name, metadata);
+                }
+                console.error('[ChatConversationService] Erro ao criar conversa:', error);
+                throw error;
+            }
+        });
+    }
+    addMessage(userId, sessionId, role, content, tokens) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const message = {
+                    role,
+                    content,
+                    timestamp: new Date(),
+                    tokens
+                };
+                const result = yield this.collection.updateOne({ userId, sessionId }, {
+                    $push: { messages: message },
+                    $set: { updatedAt: new Date() }
+                });
+                if (result.matchedCount === 0) {
+                    throw new Error(`Conversa não encontrada: ${sessionId}`);
+                }
+                console.log(`✅ [ChatConversationService] Mensagem adicionada (${role})`);
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao adicionar mensagem:', error);
+                throw error;
+            }
+        });
+    }
+    getConversationHistory(userId, sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                console.log(`\n[ChatConversationService] Buscando histórico...`);
+                console.log(`   userId: ${userId}`);
+                console.log(`   sessionId: ${sessionId}`);
+                const conversation = yield this.collection.findOne({ userId, sessionId }, { projection: { messages: 1, _id: 1, createdAt: 1 } });
+                if (!conversation) {
+                    console.warn(`⚠️ [ChatConversationService] Conversa NÃO encontrada no MongoDB`);
+                    console.warn(`   Filtro usado: { userId: "${userId}", sessionId: "${sessionId}" }`);
+                    return [];
+                }
+                const messageCount = ((_a = conversation.messages) === null || _a === void 0 ? void 0 : _a.length) || 0;
+                console.log(`✅ [ChatConversationService] Conversa encontrada`);
+                console.log(`   Criada em: ${conversation.createdAt}`);
+                console.log(`   Mensagens: ${messageCount}`);
+                return conversation.messages || [];
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao recuperar histórico:', error);
+                throw error;
+            }
+        });
+    }
+    getUserConversations(userId_1) {
+        return __awaiter(this, arguments, void 0, function* (userId, limit = 50) {
+            try {
+                const conversations = yield this.collection
+                    .find({ userId })
+                    .sort({ createdAt: -1 })
+                    .limit(limit)
+                    .project({
+                    sessionId: 1,
+                    document: 1,
+                    name: 1,
+                    createdAt: 1,
+                    updatedAt: 1,
+                    messageCount: { $size: '$messages' }
+                })
+                    .toArray();
+                console.log(`✅ [ChatConversationService] ${conversations.length} conversas recuperadas para usuário: ${userId}`);
+                return conversations;
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao recuperar conversas do usuário:', error);
+                throw error;
+            }
+        });
+    }
+    getConversation(userId, sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const conversation = yield this.collection.findOne({
+                    userId,
+                    sessionId
+                });
+                if (!conversation) {
+                    console.warn(`⚠️ [ChatConversationService] Conversa não encontrada: ${sessionId}`);
+                    return null;
+                }
+                console.log(`✅ [ChatConversationService] Conversa recuperada: ${sessionId}`);
+                return conversation;
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao recuperar conversa:', error);
+                throw error;
+            }
+        });
+    }
+    deleteConversation(userId, sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const result = yield this.collection.deleteOne({
+                    userId,
+                    sessionId
+                });
+                if (result.deletedCount === 0) {
+                    throw new Error(`Conversa não encontrada: ${sessionId}`);
+                }
+                console.log(`✅ [ChatConversationService] Conversa deletada: ${sessionId}`);
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao deletar conversa:', error);
+                throw error;
+            }
+        });
+    }
+    updateConversationMetadata(userId, sessionId, metadata) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const result = yield this.collection.updateOne({ userId, sessionId }, {
+                    $set: {
+                        metadata,
+                        updatedAt: new Date()
+                    }
+                });
+                if (result.matchedCount === 0) {
+                    throw new Error(`Conversa não encontrada: ${sessionId}`);
+                }
+                console.log(`✅ [ChatConversationService] Metadados atualizados: ${sessionId}`);
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao atualizar metadados:', error);
+                throw error;
+            }
+        });
+    }
+    cleanupExpiredConversations() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const result = yield this.collection.deleteMany({
+                    expiresAt: { $lt: new Date() }
+                });
+                console.log(`🗑️ [ChatConversationService] ${result.deletedCount} conversas expiradas removidas`);
+                return result.deletedCount;
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao limpar conversas expiradas:', error);
+                throw error;
+            }
+        });
+    }
+    getStatistics() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const stats = yield this.collection.aggregate([
+                    {
+                        $group: {
+                            _id: null,
+                            totalConversations: { $sum: 1 },
+                            totalMessages: { $sum: { $size: '$messages' } },
+                            totalUsers: { $addToSet: '$userId' },
+                            avgMessagesPerConversation: {
+                                $avg: { $size: '$messages' }
+                            }
+                        }
+                    },
+                    {
+                        $project: {
+                            _id: 0,
+                            totalConversations: 1,
+                            totalMessages: 1,
+                            totalUsers: { $size: '$totalUsers' },
+                            avgMessagesPerConversation: {
+                                $round: ['$avgMessagesPerConversation', 2]
+                            }
+                        }
+                    }
+                ]).toArray();
+                return stats[0] || {
+                    totalConversations: 0,
+                    totalMessages: 0,
+                    totalUsers: 0,
+                    avgMessagesPerConversation: 0
+                };
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao recuperar estatísticas:', error);
+                throw error;
+            }
+        });
+    }
+    getConversationsByDateRange(userId, startDate, endDate) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const conversations = yield this.collection
+                    .find({
+                    userId,
+                    createdAt: {
+                        $gte: startDate,
+                        $lte: endDate
+                    }
+                })
+                    .sort({ createdAt: -1 })
+                    .toArray();
+                console.log(`✅ [ChatConversationService] ${conversations.length} conversas encontradas no período`);
+                return conversations;
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao recuperar conversas por período:', error);
+                throw error;
+            }
+        });
+    }
+    exportConversation(userId, sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const conversation = yield this.getConversation(userId, sessionId);
+                if (!conversation) {
+                    throw new Error(`Conversa não encontrada: ${sessionId}`);
+                }
+                return JSON.stringify(conversation, null, 2);
+            }
+            catch (error) {
+                console.error('[ChatConversationService] Erro ao exportar conversa:', error);
+                throw error;
+            }
+        });
+    }
+}
+exports.ChatConversationService = ChatConversationService;

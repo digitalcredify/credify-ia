@@ -27,10 +27,10 @@ export const operationAgentService = async (
                 console.log("[Operation Agent Service] Roteando para Operation Web Agent");
                 return await runOperationWebAgent(pergunta, jsonData, startDate, endDate, startHour, endHour, onChunk);
 
-            case "pdf_agent":
-                console.log("[Operation Agent Service] Roteando para PDF Agent");
-                const sessionId = `operation_${startDate}_${endDate}`;
-                return await runPdfAgent(sessionId, pergunta);
+            // case "pdf_agent":
+            //     console.log("[Operation Agent Service] Roteando para PDF Agent");
+            //     const sessionId = `operation_${startDate}_${endDate}`;
+            //     return await runPdfAgent(sessionId, pergunta);
 
             default:
                 console.log("[Operation Agent Service] Rota não reconhecida, usando Web Agent como fallback");

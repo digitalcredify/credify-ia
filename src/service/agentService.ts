@@ -93,9 +93,9 @@ const agentService = async (
             
             return await runWebAgent(pergunta, jsonData, targetMonth, onChunk) // agente chatbot
         
-        case "pdf_agent":
+        // case "pdf_agent":
             
-            return await runPdfAgent(targetMonth, pergunta); // agente gerador de pdf
+        //     return await runPdfAgent(targetMonth, pergunta); // agente gerador de pdf
 
         default:
             return {

@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2016",
     "module": "nodenext",
-    "rootDir": "./src/",
+    "rootDir": "./",
     "moduleResolution": "nodenext",
     "baseUrl": ".",
     "outDir": "./dist/",
